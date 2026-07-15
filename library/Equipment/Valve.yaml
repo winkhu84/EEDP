@@ -1,0 +1,17 @@
+name: Valve
+category: Equipment
+description: On/off or control valve for process isolation and flow control.
+
+required_signals:
+  - name: Open Command
+    signal_type: DO
+  - name: Close Command
+    signal_type: DO
+  - name: Open Feedback
+    signal_type: DI
+  - name: Close Feedback
+    signal_type: DI
+
+optional_signals:
+  - name: Emergency Close
+    signal_type: DO

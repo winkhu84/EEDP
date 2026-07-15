@@ -1,0 +1,73 @@
+"""Recommendation Engine.
+
+Produces signal recommendations for a Device via the Rule Engine.
+"""
+
+from __future__ import annotations
+
+from app.engine.rule_engine import DeviceRule, RuleEngine, UNKNOWN_DEVICE
+from app.model.device import Device
+from app.model.recommendation import IoSummary, Recommendation, RecommendationResult
+
+
+def build_io_summary(
+    enabled_signal_types: list[str] | tuple[str, ...],
+) -> IoSummary:
+    """Count DI/DO/AI/AO from enabled recommendation signal types."""
+    counts = {"DI": 0, "DO": 0, "AI": 0, "AO": 0}
+    for signal_type in enabled_signal_types:
+        key = signal_type.strip().upper()
+        if key in counts:
+            counts[key] += 1
+    return IoSummary(
+        di=counts["DI"],
+        do=counts["DO"],
+        ai=counts["AI"],
+        ao=counts["AO"],
+    )
+
+
+class RecommendationEngine:
+    """Builds RecommendationResult data from a Device using library rules."""
+
+    def __init__(self, rule_engine: RuleEngine | None = None) -> None:
+        self._rule_engine = rule_engine or RuleEngine()
+
+    def recommend(self, device: Device) -> RecommendationResult:
+        """Return recommendation data for the given device."""
+        rule = self._rule_engine.load_rule(device.type)
+        recommendations = self._build_recommendations(rule)
+
+        return RecommendationResult(
+            device_id=device.id,
+            device_tag=device.tag,
+            device_type=device.type,
+            recommendations=recommendations,
+        )
+
+    def supported_types(self) -> tuple[str, ...]:
+        """Return device types available from the Rule Engine library."""
+        return self._rule_engine.available_types()
+
+    @staticmethod
+    def _build_recommendations(rule: DeviceRule) -> tuple[Recommendation, ...]:
+        if rule is UNKNOWN_DEVICE or rule.name == "Unknown":
+            return ()
+
+        items: list[Recommendation] = [
+            Recommendation(
+                name=item.name,
+                signal_type=item.signal_type,
+                required=True,
+            )
+            for item in rule.required_signals
+        ]
+        items.extend(
+            Recommendation(
+                name=item.name,
+                signal_type=item.signal_type,
+                required=False,
+            )
+            for item in rule.optional_signals
+        )
+        return tuple(items)

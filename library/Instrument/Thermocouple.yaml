@@ -1,0 +1,17 @@
+name: Thermocouple
+category: Instrument
+description: Thermocouple temperature sensor for process temperature measurement.
+
+required_signals:
+  - name: Measurement
+    signal_type: AI
+
+optional_signals:
+  - name: HH Alarm
+    signal_type: DI
+  - name: H Alarm
+    signal_type: DI
+  - name: L Alarm
+    signal_type: DI
+  - name: LL Alarm
+    signal_type: DI

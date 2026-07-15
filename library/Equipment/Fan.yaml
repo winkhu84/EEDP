@@ -1,0 +1,19 @@
+name: Fan
+category: Equipment
+description: Process or ventilation fan for air and gas handling.
+
+required_signals:
+  - name: Start Command
+    signal_type: DO
+  - name: Run Feedback
+    signal_type: DI
+  - name: Fault Feedback
+    signal_type: DI
+
+optional_signals:
+  - name: Reset
+    signal_type: DO
+  - name: Local Mode
+    signal_type: DI
+  - name: Remote Mode
+    signal_type: DI
