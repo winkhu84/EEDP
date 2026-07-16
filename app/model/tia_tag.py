@@ -25,3 +25,4 @@ class TIATag:
     status: str = STATUS_OK
     validation_messages: list[str] = field(default_factory=list)
     signal_order: int = 0
+    device_order: int = 0
