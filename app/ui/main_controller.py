@@ -7,6 +7,13 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
+from app.engine.address_manager import (
+    apply_start_addresses,
+    assign_device_addresses,
+    clear_device_addresses,
+    find_address_conflicts,
+    format_conflict_message,
+)
 from app.engine.device_manager import DeviceDraft, DeviceManager, suggest_next_tag
 from app.engine.io_list_parser import IoListParser
 from app.engine.io_summary_engine import summarize_device, summarize_project
@@ -56,6 +63,12 @@ class MainController:
         )
         self._view.property_editor.recommendation_changed.connect(
             self._on_recommendation_changed
+        )
+        self._view.property_editor.assign_addresses_requested.connect(
+            self._on_assign_addresses
+        )
+        self._view.property_editor.clear_addresses_requested.connect(
+            self._on_clear_addresses
         )
 
         signal_editor = self._view.property_editor.signal_editor
@@ -202,7 +215,80 @@ class MainController:
             print(signal.name)
 
         self._view.property_editor.show_device(device, result)
+        self._refresh_address_conflict_status(show_dialog=False)
         self._refresh_io_summaries()
+
+    def _on_assign_addresses(self) -> None:
+        device = self._selected_device()
+        if device is None:
+            return
+
+        # Persist any pending signal-editor edits before assigning.
+        self._on_signal_editor_changed()
+
+        di_start, do_start, ai_start, ao_start = (
+            self._view.property_editor.read_plc_start_addresses()
+        )
+        apply_start_addresses(
+            device,
+            di_start=di_start,
+            do_start=do_start,
+            ai_start=ai_start,
+            ao_start=ao_start,
+        )
+
+        result = assign_device_addresses(device)
+        if not result.ok:
+            QMessageBox.warning(
+                self._view,
+                "Assign Addresses",
+                "\n".join(result.errors) or "Address assignment failed.",
+            )
+            return
+
+        self._view.property_editor.show_device_signals(device.signals)
+        self._refresh_address_conflict_status(show_dialog=True)
+        self._refresh_io_summaries()
+
+    def _on_clear_addresses(self) -> None:
+        device = self._selected_device()
+        if device is None:
+            return
+
+        reply = QMessageBox.question(
+            self._view,
+            "Clear Addresses",
+            (
+                f"Clear PLC start addresses and all signal addresses "
+                f"for '{device.tag}'?"
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        clear_device_addresses(device)
+        self._view.property_editor.set_plc_start_addresses("", "", "", "")
+        self._view.property_editor.show_device_signals(device.signals)
+        self._refresh_address_conflict_status(show_dialog=False)
+        self._refresh_io_summaries()
+
+    def _refresh_address_conflict_status(self, *, show_dialog: bool) -> None:
+        conflicts = find_address_conflicts(self._device_manager.devices)
+        if not conflicts:
+            self._view.property_editor.set_address_conflict_status("")
+            return
+
+        unique = sorted({item.address for item in conflicts})
+        summary = "PLC address conflict detected: " + ", ".join(unique)
+        self._view.property_editor.set_address_conflict_status(summary)
+        if show_dialog:
+            QMessageBox.warning(
+                self._view,
+                "PLC Address Conflict",
+                format_conflict_message(conflicts),
+            )
 
     def _on_recommendation_changed(self) -> None:
         device = self._selected_device()
@@ -372,4 +458,16 @@ class MainController:
         return
 
     def _on_generate(self) -> None:
+        conflicts = find_address_conflicts(self._device_manager.devices)
+        if conflicts:
+            QMessageBox.warning(
+                self._view,
+                "Generate",
+                (
+                    "Generate is blocked until PLC address conflicts "
+                    "are resolved.\n\n"
+                    + format_conflict_message(conflicts)
+                ),
+            )
+            return
         return

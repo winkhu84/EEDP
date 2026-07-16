@@ -19,6 +19,10 @@ class Device:
     description: str
     quantity: int
     signals: list[Signal] = field(default_factory=list)
+    di_start_address: str = ""
+    do_start_address: str = ""
+    ai_start_address: str = ""
+    ao_start_address: str = ""
 
     def add_signal(self, signal: Signal) -> None:
         """Attach a signal object to this device."""

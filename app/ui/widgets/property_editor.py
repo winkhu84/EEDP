@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
+    QPushButton,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -30,6 +32,8 @@ class PropertyEditorWidget(QWidget):
     """Displays device properties, recommendations, signals, and I/O summaries."""
 
     recommendation_changed = Signal()
+    assign_addresses_requested = Signal()
+    clear_addresses_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -43,6 +47,14 @@ class PropertyEditorWidget(QWidget):
         self._category_value = QLabel("-")
         self._type_value = QLabel("-")
         self._description_value = QLabel("-")
+
+        self.di_start_edit = QLineEdit()
+        self.do_start_edit = QLineEdit()
+        self.ai_start_edit = QLineEdit()
+        self.ao_start_edit = QLineEdit()
+        self.assign_addresses_button = QPushButton("Assign Addresses")
+        self.clear_addresses_button = QPushButton("Clear Addresses")
+        self.conflict_status_label = QLabel("")
 
         self.recommendation_table = QTableWidget(0, 4)
         self.signal_editor = SignalEditorWidget()
@@ -63,6 +75,12 @@ class PropertyEditorWidget(QWidget):
 
         self._build_ui()
         self.recommendation_table.itemChanged.connect(self._on_item_changed)
+        self.assign_addresses_button.clicked.connect(
+            self.assign_addresses_requested.emit
+        )
+        self.clear_addresses_button.clicked.connect(
+            self.clear_addresses_requested.emit
+        )
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -80,6 +98,43 @@ class PropertyEditorWidget(QWidget):
         form.addRow("Category", self._category_value)
         form.addRow("Type", self._type_value)
         form.addRow("Description", self._description_value)
+
+        plc_address_box = QGroupBox("PLC Start Address")
+        plc_form = QFormLayout(plc_address_box)
+        plc_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        for edit, placeholder in (
+            (self.di_start_edit, "I0.0"),
+            (self.do_start_edit, "Q0.0"),
+            (self.ai_start_edit, "IW64"),
+            (self.ao_start_edit, "QW64"),
+        ):
+            edit.setPlaceholderText(placeholder)
+            edit.setClearButtonEnabled(True)
+            edit.setMaximumWidth(120)
+        plc_form.addRow("DI Start", self.di_start_edit)
+        plc_form.addRow("DO Start", self.do_start_edit)
+        plc_form.addRow("AI Start", self.ai_start_edit)
+        plc_form.addRow("AO Start", self.ao_start_edit)
+
+        address_buttons = QHBoxLayout()
+        address_buttons.setContentsMargins(0, 0, 0, 0)
+        address_buttons.setSpacing(6)
+        address_buttons.addWidget(self.assign_addresses_button)
+        address_buttons.addWidget(self.clear_addresses_button)
+        address_buttons.addStretch(1)
+        plc_form.addRow(address_buttons)
+
+        self.conflict_status_label.setObjectName("addressConflictLabel")
+        self.conflict_status_label.setWordWrap(True)
+        self.conflict_status_label.setStyleSheet("color: #B71C1C;")
+        plc_form.addRow(self.conflict_status_label)
+
+        properties_row = QWidget()
+        properties_layout = QHBoxLayout(properties_row)
+        properties_layout.setContentsMargins(0, 0, 0, 0)
+        properties_layout.setSpacing(10)
+        properties_layout.addWidget(details, stretch=1)
+        properties_layout.addWidget(plc_address_box, stretch=0)
 
         recommendation_box = QGroupBox("Recommended Signals")
         recommendation_layout = QVBoxLayout(recommendation_box)
@@ -150,7 +205,7 @@ class PropertyEditorWidget(QWidget):
         details_layout = QVBoxLayout(details_page)
         details_layout.setContentsMargins(0, 0, 0, 0)
         details_layout.setSpacing(8)
-        details_layout.addWidget(details)
+        details_layout.addWidget(properties_row)
         details_layout.addWidget(signals_row, stretch=1)
 
         self._stack.addWidget(placeholder_page)
@@ -165,6 +220,8 @@ class PropertyEditorWidget(QWidget):
         self.recommendation_table.setRowCount(0)
         self.recommendation_table.blockSignals(False)
         self.signal_editor.clear()
+        self.set_plc_start_addresses("", "", "", "")
+        self.set_address_conflict_status("")
         self.set_device_io_summary(
             {"DI": 0, "DO": 0, "AI": 0, "AO": 0, "TOTAL": 0}
         )
@@ -182,11 +239,43 @@ class PropertyEditorWidget(QWidget):
         self._category_value.setText(device.category)
         self._type_value.setText(device.type)
         self._description_value.setText(device.description or "-")
+        self.set_plc_start_addresses(
+            device.di_start_address,
+            device.do_start_address,
+            device.ai_start_address,
+            device.ao_start_address,
+        )
 
         recommendations = () if result is None else result.recommendations
         self._populate_recommendations(recommendations, device.signals)
         self.show_device_signals(device.signals)
         self._stack.setCurrentIndex(1)
+
+    def set_plc_start_addresses(
+        self,
+        di_start: str,
+        do_start: str,
+        ai_start: str,
+        ao_start: str,
+    ) -> None:
+        """Load PLC start address fields for the selected device."""
+        self.di_start_edit.setText(di_start)
+        self.do_start_edit.setText(do_start)
+        self.ai_start_edit.setText(ai_start)
+        self.ao_start_edit.setText(ao_start)
+
+    def read_plc_start_addresses(self) -> tuple[str, str, str, str]:
+        """Return (DI, DO, AI, AO) start address field values."""
+        return (
+            self.di_start_edit.text().strip(),
+            self.do_start_edit.text().strip(),
+            self.ai_start_edit.text().strip(),
+            self.ao_start_edit.text().strip(),
+        )
+
+    def set_address_conflict_status(self, message: str) -> None:
+        """Show or clear the project address conflict status line."""
+        self.conflict_status_label.setText(message)
 
     def show_device_signals(self, signals: list[DeviceSignal]) -> None:
         """Refresh the Device Signals editor from domain objects."""

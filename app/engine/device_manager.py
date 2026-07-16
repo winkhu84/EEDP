@@ -211,6 +211,10 @@ class DeviceManager:
             description=source.description,
             quantity=1,
             signals=_copy_signals(source.signals),
+            di_start_address=source.di_start_address,
+            do_start_address=source.do_start_address,
+            ai_start_address=source.ai_start_address,
+            ao_start_address=source.ao_start_address,
         )
         self._devices.append(device)
         return device

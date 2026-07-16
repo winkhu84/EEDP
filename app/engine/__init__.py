@@ -1,5 +1,20 @@
 """Processing engine layer."""
 
+from app.engine.address_manager import (
+    AddressConflict,
+    AssignResult,
+    apply_start_addresses,
+    assign_device_addresses,
+    assign_project_addresses,
+    clear_device_addresses,
+    find_address_conflicts,
+    format_conflict_message,
+    increment_analog_address,
+    increment_digital_address,
+    parse_analog_address,
+    parse_digital_address,
+    validate_device_start_addresses,
+)
 from app.engine.device_manager import (
     AddDevicesResult,
     DeviceDraft,
@@ -26,6 +41,8 @@ from app.engine.tag_type_resolver import resolve_device_category, resolve_device
 
 __all__ = [
     "AddDevicesResult",
+    "AddressConflict",
+    "AssignResult",
     "DeviceDraft",
     "DeviceManager",
     "DeviceRule",
@@ -37,13 +54,24 @@ __all__ = [
     "SignalEngine",
     "SignalRule",
     "UNKNOWN_DEVICE",
+    "apply_start_addresses",
+    "assign_device_addresses",
+    "assign_project_addresses",
     "build_io_summary",
     "calculate_card_requirement",
     "calculate_project_cards",
+    "clear_device_addresses",
     "expand_sequential_tags",
+    "find_address_conflicts",
+    "format_conflict_message",
+    "increment_analog_address",
+    "increment_digital_address",
+    "parse_analog_address",
+    "parse_digital_address",
     "resolve_device_category",
     "resolve_device_type",
     "suggest_next_tag",
     "summarize_device",
     "summarize_project",
+    "validate_device_start_addresses",
 ]
