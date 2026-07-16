@@ -41,6 +41,17 @@ from app.engine.fc_io_generator import (
     sort_fc_io_rows,
     validate_fc_io_rows,
 )
+from app.engine.generate_preview_engine import (
+    GeneratePreviewResult,
+    ProjectGenerationSummary,
+    ValidationEntry,
+    build_default_file_name,
+    build_generate_items,
+    get_default_output_directory,
+    get_project_generation_summary,
+    sanitize_file_name,
+    validate_generate_items,
+)
 from app.engine.io_list_parser import IoListParseResult, IoListParser
 from app.engine.io_summary_engine import summarize_device, summarize_project
 from app.engine.plc_card_calculator import (
@@ -78,14 +89,17 @@ __all__ = [
     "DeviceRule",
     "FCIOGenerationResult",
     "FCIOIssue",
+    "GeneratePreviewResult",
     "IoListParseResult",
     "IoListParser",
     "PlcCardRequirement",
+    "ProjectGenerationSummary",
     "RecommendationEngine",
     "RuleEngine",
     "SignalEngine",
     "SignalRule",
     "UNKNOWN_DEVICE",
+    "ValidationEntry",
     "apply_default_use_start_flags",
     "apply_start_addresses",
     "assign_device_addresses",
@@ -94,6 +108,7 @@ __all__ = [
     "build_all_card_usage",
     "build_card_usage",
     "build_digital_card_mapping",
+    "build_generate_items",
     "build_io_summary",
     "build_project_module_mapping",
     "calculate_card_requirement",
@@ -108,7 +123,9 @@ __all__ = [
     "generate_device_rows",
     "generate_project_rows",
     "get_analog_card_index",
+    "get_default_output_directory",
     "get_digital_card_index",
+    "get_project_generation_summary",
     "group_digital_addresses_by_card",
     "increment_analog_address",
     "increment_digital_address",
@@ -116,6 +133,7 @@ __all__ = [
     "parse_digital_address",
     "resolve_device_category",
     "resolve_device_type",
+    "sanitize_file_name",
     "sort_devices",
     "sort_fc_io_rows",
     "suggest_next_tag",
@@ -123,5 +141,6 @@ __all__ = [
     "summarize_project",
     "validate_device_start_addresses",
     "validate_fc_io_rows",
+    "validate_generate_items",
     "validate_mapping",
 ]

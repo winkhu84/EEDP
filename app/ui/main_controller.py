@@ -20,6 +20,10 @@ from app.engine.address_manager import (
 )
 from app.engine.device_manager import DeviceDraft, DeviceManager, suggest_next_tag
 from app.engine.fc_io_generator import generate_project_rows
+from app.engine.generate_preview_engine import (
+    build_generate_items,
+    get_default_output_directory,
+)
 from app.engine.io_list_parser import IoListParser
 from app.engine.io_summary_engine import summarize_device, summarize_project
 from app.engine.plc_card_calculator import calculate_project_cards
@@ -34,6 +38,7 @@ from app.export.fc_io_excel_exporter import (
 from app.model.plc_card_config import PlcCardConfig, default_plc_card_configurations
 from app.ui.dialogs.address_usage_dialog import AddressUsageDialog
 from app.ui.dialogs.fc_io_preview_dialog import FCIOPreviewDialog
+from app.ui.dialogs.generate_preview_dialog import GeneratePreviewDialog
 from app.ui.dialogs.plc_module_mapping_dialog import PLCModuleMappingDialog
 from app.ui.main_window import MainWindow
 
@@ -554,6 +559,63 @@ class MainController:
             revision="",
         )
 
+    def _build_generate_preview(self, output_directory: str | Path | None = None):
+        info = self._project_export_info()
+        return build_generate_items(
+            self._device_manager.devices,
+            customer=info.customer,
+            project_name=info.project_name,
+            revision=info.revision,
+            output_directory=output_directory or get_default_output_directory(),
+            card_configurations=self._plc_card_configs,
+        )
+
+    def _export_fc_io_workbook_to_path(
+        self,
+        path: Path,
+        *,
+        parent,
+        result=None,
+    ) -> bool:
+        """Export FC_IO workbook to path. Returns True on success."""
+        if result is None:
+            result = generate_project_rows(self._device_manager.devices)
+        project_info = self._project_export_info()
+        try:
+            export_fc_io_workbook(
+                path,
+                devices=self._device_manager.devices,
+                result=result,
+                project_info=project_info,
+                card_configurations=self._plc_card_configs,
+            )
+        except PermissionError:
+            QMessageBox.critical(
+                parent,
+                "Export Excel",
+                (
+                    "Permission denied.\n"
+                    "The file may be open in Excel or you may not have "
+                    "write access to this location."
+                ),
+            )
+            return False
+        except OSError as exc:
+            QMessageBox.critical(
+                parent,
+                "Export Excel",
+                f"Failed to export Excel file:\n{exc}",
+            )
+            return False
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(
+                parent,
+                "Export Excel",
+                f"Export failed:\n{exc}",
+            )
+            return False
+        return True
+
     def _on_export_fc_io_excel(self, dialog: FCIOPreviewDialog) -> None:
         result = dialog.result
         if result.error_count > 0:
@@ -597,38 +659,7 @@ class MainController:
             if overwrite != QMessageBox.StandardButton.Yes:
                 return
 
-        try:
-            export_fc_io_workbook(
-                path,
-                devices=self._device_manager.devices,
-                result=result,
-                project_info=project_info,
-                card_configurations=self._plc_card_configs,
-            )
-        except PermissionError:
-            QMessageBox.critical(
-                dialog,
-                "Export Excel",
-                (
-                    "Permission denied.\n"
-                    "The file may be open in Excel or you may not have "
-                    "write access to this location."
-                ),
-            )
-            return
-        except OSError as exc:
-            QMessageBox.critical(
-                dialog,
-                "Export Excel",
-                f"Failed to export Excel file:\n{exc}",
-            )
-            return
-        except Exception as exc:  # noqa: BLE001 - surface unexpected export errors
-            QMessageBox.critical(
-                dialog,
-                "Export Excel",
-                f"Export failed:\n{exc}",
-            )
+        if not self._export_fc_io_workbook_to_path(path, parent=dialog, result=result):
             return
 
         message = (
@@ -652,16 +683,88 @@ class MainController:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent.resolve())))
 
     def _on_generate(self) -> None:
-        conflicts = find_address_conflicts(self._device_manager.devices)
-        if conflicts:
-            QMessageBox.warning(
-                self._view,
-                "Generate",
-                (
-                    "Generate is blocked until PLC address conflicts "
-                    "are resolved.\n\n"
-                    + format_conflict_message(conflicts)
-                ),
+        preview = self._build_generate_preview()
+        dialog_holder: dict[str, GeneratePreviewDialog | None] = {"dialog": None}
+
+        def refresh():
+            dialog = dialog_holder["dialog"]
+            if dialog is None:
+                return preview
+            output_dir = dialog.output_dir_edit.text().strip()
+            refreshed = self._build_generate_preview(
+                output_directory=output_dir or preview.output_directory
             )
-            return
-        return
+            selection = {
+                item.item_id: item.selected for item in dialog.result.items
+            }
+            for item in refreshed.items:
+                if item.item_id in selection:
+                    item.selected = selection[item.item_id]
+            return refreshed
+
+        dialog = GeneratePreviewDialog(
+            preview,
+            refresh_callback=refresh,
+            parent=self._view,
+        )
+        dialog_holder["dialog"] = dialog
+        dialog.generate_requested.connect(
+            lambda items, output_dir: self._on_generate_selected(
+                dialog, items, output_dir
+            )
+        )
+        dialog.exec()
+
+    def _on_generate_selected(
+        self,
+        dialog: GeneratePreviewDialog,
+        selected_items,
+        output_dir: str,
+    ) -> None:
+        out_path = Path(output_dir)
+        generated: list[str] = []
+        failed: list[str] = []
+        preview = dialog.result
+
+        for item in selected_items:
+            target = out_path / item.file_name
+            if target.exists():
+                overwrite = QMessageBox.question(
+                    dialog,
+                    "Generate Selected",
+                    f"File already exists:\n{target}\n\nOverwrite?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if overwrite != QMessageBox.StandardButton.Yes:
+                    failed.append(item.file_name)
+                    continue
+
+            if item.item_id == "fc_io_excel":
+                try:
+                    out_path.mkdir(parents=True, exist_ok=True)
+                except OSError as exc:
+                    QMessageBox.critical(
+                        dialog,
+                        "Generate Selected",
+                        f"Failed to create output directory:\n{exc}",
+                    )
+                    return
+                if self._export_fc_io_workbook_to_path(
+                    target,
+                    parent=dialog,
+                    result=preview.fc_io_result,
+                ):
+                    generated.append(item.file_name)
+                else:
+                    failed.append(item.file_name)
+            else:
+                failed.append(item.file_name)
+
+        dialog.show_generation_result(
+            generated=generated,
+            failed=failed,
+            output_folder=str(out_path),
+            warning_count=preview.summary.warning_count,
+            error_count=preview.summary.error_count,
+        )
