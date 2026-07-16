@@ -31,6 +31,7 @@ class ProjectToolbar(QWidget):
         self.remove_device_button = QPushButton("Remove Device")
         self.duplicate_device_button = QPushButton("Duplicate Device")
         self.import_io_list_button = QPushButton("Import IO List")
+        self.debug_button = QPushButton("Debug")
 
         self._build_ui()
         self.set_device_actions_enabled(False)
@@ -59,6 +60,7 @@ class ProjectToolbar(QWidget):
         layout.addWidget(self.remove_device_button)
         layout.addWidget(self.duplicate_device_button)
         layout.addWidget(self.import_io_list_button)
+        layout.addWidget(self.debug_button)
 
         layout.addStretch(1)
 

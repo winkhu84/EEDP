@@ -40,6 +40,7 @@ class MainController:
         toolbar.remove_device_button.clicked.connect(self._on_remove_device)
         toolbar.duplicate_device_button.clicked.connect(self._on_duplicate_device)
         toolbar.import_io_list_button.clicked.connect(self._on_import_io_list)
+        toolbar.debug_button.clicked.connect(self._on_debug)
 
         self._view.project_tree.tree.itemSelectionChanged.connect(
             self._on_tree_selection_changed
@@ -165,6 +166,12 @@ class MainController:
         else:
             result = self._recommendation_engine.recommendation_result(device)
 
+        # DEBUG (testing only) — remove later
+        print(device)
+        print(len(device.signals))
+        for signal in device.signals:
+            print(signal.name)
+
         self._view.property_editor.show_device(device, result)
         self._refresh_io_summary()
 
@@ -187,6 +194,37 @@ class MainController:
     def _update_device_action_state(self) -> None:
         has_device = self._view.project_tree.selected_device_id() is not None
         self._view.toolbar.set_device_actions_enabled(has_device)
+
+    def _on_debug(self) -> None:
+        """Temporary debug dialog for the selected device."""
+        device_id = self._view.project_tree.selected_device_id()
+        if device_id is None:
+            QMessageBox.information(
+                self._view,
+                "Debug",
+                "No device selected.",
+            )
+            return
+
+        device = self._device_manager.get_by_id(device_id)
+        if device is None:
+            QMessageBox.information(
+                self._view,
+                "Debug",
+                "Selected device not found in memory.",
+            )
+            return
+
+        signal_names = "\n".join(f"- {signal.name}" for signal in device.signals)
+        if not signal_names:
+            signal_names = "(none)"
+
+        message = (
+            f"Device Tag: {device.tag}\n"
+            f"Signal Count: {len(device.signals)}\n\n"
+            f"Signal Names:\n{signal_names}"
+        )
+        QMessageBox.information(self._view, "Debug", message)
 
     def _on_new_project(self) -> None:
         return
