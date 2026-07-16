@@ -159,11 +159,25 @@ class MainController:
             self._view.property_editor.clear()
             return
 
-        result = self._recommendation_engine.recommend(device)
+        # Apply recommendation once per device (creates Signal objects).
+        if not device.signals:
+            result = self._recommendation_engine.recommend(device)
+        else:
+            result = self._recommendation_engine.recommendation_result(device)
+
         self._view.property_editor.show_device(device, result)
         self._refresh_io_summary()
 
     def _on_recommendation_changed(self) -> None:
+        device_id = self._view.project_tree.selected_device_id()
+        if device_id is not None:
+            device = self._device_manager.get_by_id(device_id)
+            if device is not None:
+                states = self._view.property_editor.recommendation_enable_states()
+                for signal in device.signals:
+                    if signal.name in states:
+                        signal.enabled = states[signal.name]
+                self._view.property_editor.show_device_signals(device.signals)
         self._refresh_io_summary()
 
     def _refresh_io_summary(self) -> None:

@@ -19,3 +19,16 @@ class Device:
     description: str
     quantity: int
     signals: list[Signal] = field(default_factory=list)
+
+    def add_signal(self, signal: Signal) -> None:
+        """Attach a signal object to this device."""
+        self.signals.append(signal)
+
+    def remove_signal(self, signal: Signal) -> None:
+        """Remove a signal object from this device if present."""
+        if signal in self.signals:
+            self.signals.remove(signal)
+
+    def clear_signals(self) -> None:
+        """Remove all signals from this device."""
+        self.signals.clear()

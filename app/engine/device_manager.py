@@ -116,9 +116,13 @@ class DeviceManager:
             signals=[
                 Signal(
                     name=signal.name,
-                    signal_type=signal.signal_type,
+                    io_type=signal.io_type,
                     required=signal.required,
+                    enabled=signal.enabled,
                     address=signal.address,
+                    terminal=signal.terminal,
+                    cable=signal.cable,
+                    description=signal.description,
                     remark=signal.remark,
                 )
                 for signal in source.signals

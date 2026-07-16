@@ -7,6 +7,8 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -17,10 +19,11 @@ from PySide6.QtWidgets import (
 from app.common.constants import NO_DEVICE_SELECTED
 from app.model.device import Device
 from app.model.recommendation import IoSummary, Recommendation, RecommendationResult
+from app.model.signal import Signal as DeviceSignal
 
 
 class PropertyEditorWidget(QWidget):
-    """Displays device properties, recommendations, and I/O summary."""
+    """Displays device properties, recommendations, signals, and I/O summary."""
 
     recommendation_changed = Signal()
 
@@ -39,6 +42,7 @@ class PropertyEditorWidget(QWidget):
         self._quantity_value = QLabel("-")
 
         self.recommendation_table = QTableWidget(0, 4)
+        self.device_signals_list = QListWidget()
         self._di_value = QLabel("DI : 0")
         self._do_value = QLabel("DO : 0")
         self._ai_value = QLabel("AI : 0")
@@ -81,6 +85,11 @@ class PropertyEditorWidget(QWidget):
         )
         recommendation_layout.addWidget(self.recommendation_table)
 
+        signals_box = QGroupBox("Device Signals")
+        signals_layout = QVBoxLayout(signals_box)
+        self.device_signals_list.setObjectName("deviceSignalsList")
+        signals_layout.addWidget(self.device_signals_list)
+
         io_box = QGroupBox("I/O Summary")
         io_layout = QVBoxLayout(io_box)
         io_layout.addWidget(self._di_value)
@@ -97,6 +106,7 @@ class PropertyEditorWidget(QWidget):
         details_layout.setContentsMargins(0, 0, 0, 0)
         details_layout.addWidget(details)
         details_layout.addWidget(recommendation_box, stretch=1)
+        details_layout.addWidget(signals_box, stretch=1)
         details_layout.addWidget(io_box)
 
         self._stack.addWidget(placeholder_page)
@@ -109,6 +119,7 @@ class PropertyEditorWidget(QWidget):
         self.recommendation_table.blockSignals(True)
         self.recommendation_table.setRowCount(0)
         self.recommendation_table.blockSignals(False)
+        self.device_signals_list.clear()
         self.set_io_summary(IoSummary())
         self._stack.setCurrentIndex(0)
 
@@ -117,7 +128,7 @@ class PropertyEditorWidget(QWidget):
         device: Device,
         result: RecommendationResult | None = None,
     ) -> None:
-        """Populate properties and optional recommendations."""
+        """Populate properties, recommendations, and device signal list."""
         self._tag_value.setText(device.tag)
         self._area_value.setText(device.area)
         self._category_value.setText(device.category)
@@ -126,8 +137,18 @@ class PropertyEditorWidget(QWidget):
         self._quantity_value.setText(str(device.quantity))
 
         recommendations = () if result is None else result.recommendations
-        self._populate_recommendations(recommendations)
+        self._populate_recommendations(recommendations, device.signals)
+        self.show_device_signals(device.signals)
         self._stack.setCurrentIndex(1)
+
+    def show_device_signals(self, signals: list[DeviceSignal]) -> None:
+        """Refresh the Device Signals list from domain objects."""
+        self.device_signals_list.clear()
+        for signal in signals:
+            state = "ON" if signal.enabled else "OFF"
+            category = "Required" if signal.required else "Optional"
+            text = f"{signal.name}  |  {signal.io_type}  |  {category}  |  {state}"
+            self.device_signals_list.addItem(QListWidgetItem(text))
 
     def set_io_summary(self, summary: IoSummary) -> None:
         """Update the I/O summary labels."""
@@ -148,10 +169,26 @@ class PropertyEditorWidget(QWidget):
                 types.append(type_item.text())
         return types
 
+    def recommendation_enable_states(self) -> dict[str, bool]:
+        """Return signal name → enabled map from the recommendation table."""
+        states: dict[str, bool] = {}
+        for row in range(self.recommendation_table.rowCount()):
+            enable_item = self.recommendation_table.item(row, 0)
+            name_item = self.recommendation_table.item(row, 1)
+            if enable_item is None or name_item is None:
+                continue
+            states[name_item.text()] = (
+                enable_item.checkState() == Qt.CheckState.Checked
+            )
+        return states
+
     def _populate_recommendations(
         self,
         recommendations: tuple[Recommendation, ...],
+        device_signals: list[DeviceSignal],
     ) -> None:
+        enabled_by_name = {signal.name: signal.enabled for signal in device_signals}
+
         self.recommendation_table.blockSignals(True)
         self.recommendation_table.setRowCount(0)
         self.recommendation_table.setRowCount(len(recommendations))
@@ -163,10 +200,12 @@ class PropertyEditorWidget(QWidget):
                 | Qt.ItemFlag.ItemIsEnabled
                 | Qt.ItemFlag.ItemIsSelectable
             )
+            is_enabled = enabled_by_name.get(
+                recommendation.name,
+                recommendation.required,
+            )
             enable_item.setCheckState(
-                Qt.CheckState.Checked
-                if recommendation.required
-                else Qt.CheckState.Unchecked
+                Qt.CheckState.Checked if is_enabled else Qt.CheckState.Unchecked
             )
             enable_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
 

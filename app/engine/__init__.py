@@ -9,6 +9,7 @@ from app.engine.rule_engine import (
     SignalRule,
     UNKNOWN_DEVICE,
 )
+from app.engine.signal_engine import SignalEngine
 from app.engine.tag_type_resolver import resolve_device_category, resolve_device_type
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "IoListParser",
     "RecommendationEngine",
     "RuleEngine",
+    "SignalEngine",
     "SignalRule",
     "UNKNOWN_DEVICE",
     "build_io_summary",

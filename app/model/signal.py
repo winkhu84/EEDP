@@ -7,10 +7,14 @@ from dataclasses import dataclass
 
 @dataclass
 class Signal:
-    """I/O or control signal attached to a device."""
+    """I/O or control signal owned by a device."""
 
     name: str
-    signal_type: str
+    io_type: str
     required: bool
-    address: str
-    remark: str
+    enabled: bool = True
+    address: str = ""
+    terminal: str = ""
+    cable: str = ""
+    description: str = ""
+    remark: str = ""

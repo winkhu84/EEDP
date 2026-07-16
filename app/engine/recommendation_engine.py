@@ -1,11 +1,12 @@
 """Recommendation Engine.
 
-Produces signal recommendations for a Device via the Rule Engine.
+Produces signal recommendations and Signal objects for a Device.
 """
 
 from __future__ import annotations
 
 from app.engine.rule_engine import DeviceRule, RuleEngine, UNKNOWN_DEVICE
+from app.engine.signal_engine import SignalEngine
 from app.model.device import Device
 from app.model.recommendation import IoSummary, Recommendation, RecommendationResult
 
@@ -28,26 +29,39 @@ def build_io_summary(
 
 
 class RecommendationEngine:
-    """Builds RecommendationResult data from a Device using library rules."""
+    """Applies library rules: UI recommendations + Device Signal objects."""
 
-    def __init__(self, rule_engine: RuleEngine | None = None) -> None:
+    def __init__(
+        self,
+        rule_engine: RuleEngine | None = None,
+        signal_engine: SignalEngine | None = None,
+    ) -> None:
         self._rule_engine = rule_engine or RuleEngine()
+        self._signal_engine = signal_engine or SignalEngine()
 
     def recommend(self, device: Device) -> RecommendationResult:
-        """Return recommendation data for the given device."""
+        """Create Signal objects on the device and return UI recommendation data."""
         rule = self._rule_engine.load_rule(device.type)
-        recommendations = self._build_recommendations(rule)
+        self._signal_engine.create_signals_from_rule(device, rule)
+        return self._to_result(device, rule)
 
-        return RecommendationResult(
-            device_id=device.id,
-            device_tag=device.tag,
-            device_type=device.type,
-            recommendations=recommendations,
-        )
+    def recommendation_result(self, device: Device) -> RecommendationResult:
+        """Build UI recommendation data without recreating Signal objects."""
+        rule = self._rule_engine.load_rule(device.type)
+        return self._to_result(device, rule)
 
     def supported_types(self) -> tuple[str, ...]:
         """Return device types available from the Rule Engine library."""
         return self._rule_engine.available_types()
+
+    @staticmethod
+    def _to_result(device: Device, rule: DeviceRule) -> RecommendationResult:
+        return RecommendationResult(
+            device_id=device.id,
+            device_tag=device.tag,
+            device_type=device.type,
+            recommendations=RecommendationEngine._build_recommendations(rule),
+        )
 
     @staticmethod
     def _build_recommendations(rule: DeviceRule) -> tuple[Recommendation, ...]:
