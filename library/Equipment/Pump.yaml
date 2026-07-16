@@ -2,17 +2,22 @@ name: Pump
 category: Equipment
 description: Process pump for fluid transfer and circulation.
 
-required_signals:
+# Ordered list controls Device Signals creation order.
+# Address assignment preserves this order within each I/O type.
+signals:
   - name: Start Command
     signal_type: DO
-  - name: Run Feedback
-    signal_type: DI
-  - name: Fault Feedback
-    signal_type: DI
-
-optional_signals:
+    required: true
   - name: Reset
     signal_type: DO
+    required: false
   - name: Local/Remote Mode
     signal_type: DI
+    required: false
     description: "0 = Local, 1 = Remote"
+  - name: Run Feedback
+    signal_type: DI
+    required: true
+  - name: Fault Feedback
+    signal_type: DI
+    required: true

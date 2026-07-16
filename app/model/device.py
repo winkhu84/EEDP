@@ -23,6 +23,10 @@ class Device:
     do_start_address: str = ""
     ai_start_address: str = ""
     ao_start_address: str = ""
+    use_di_start_address: bool = False
+    use_do_start_address: bool = False
+    use_ai_start_address: bool = False
+    use_ao_start_address: bool = False
 
     def add_signal(self, signal: Signal) -> None:
         """Attach a signal object to this device."""

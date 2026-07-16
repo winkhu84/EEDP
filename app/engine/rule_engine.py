@@ -15,6 +15,7 @@ class SignalRule:
     name: str
     signal_type: str
     description: str = ""
+    required: bool = True
 
 
 @dataclass(frozen=True)
@@ -24,16 +25,24 @@ class DeviceRule:
     name: str
     category: str
     description: str
-    required_signals: tuple[SignalRule, ...]
-    optional_signals: tuple[SignalRule, ...]
+    signals: tuple[SignalRule, ...]
+
+    @property
+    def required_signals(self) -> tuple[SignalRule, ...]:
+        """Required signals in library order."""
+        return tuple(item for item in self.signals if item.required)
+
+    @property
+    def optional_signals(self) -> tuple[SignalRule, ...]:
+        """Optional signals in library order."""
+        return tuple(item for item in self.signals if not item.required)
 
 
 UNKNOWN_DEVICE = DeviceRule(
     name="Unknown",
     category="Unknown",
     description="Unknown device type. No library rule found.",
-    required_signals=(),
-    optional_signals=(),
+    signals=(),
 )
 
 _LIBRARY_SUBDIRS = (
@@ -112,12 +121,32 @@ class RuleEngine:
             name=name,
             category=str(data.get("category", "")).strip(),
             description=str(data.get("description", "")).strip(),
-            required_signals=self._parse_signals(data.get("required_signals")),
-            optional_signals=self._parse_signals(data.get("optional_signals")),
+            signals=self._parse_device_signals(data),
         )
 
+    @classmethod
+    def _parse_device_signals(cls, data: dict) -> tuple[SignalRule, ...]:
+        """Prefer ordered `signals`; fall back to required + optional lists."""
+        raw_signals = data.get("signals")
+        if isinstance(raw_signals, list):
+            return cls._parse_signals(raw_signals, default_required=True)
+
+        required = cls._parse_signals(
+            data.get("required_signals"),
+            default_required=True,
+        )
+        optional = cls._parse_signals(
+            data.get("optional_signals"),
+            default_required=False,
+        )
+        return required + optional
+
     @staticmethod
-    def _parse_signals(raw: object) -> tuple[SignalRule, ...]:
+    def _parse_signals(
+        raw: object,
+        *,
+        default_required: bool,
+    ) -> tuple[SignalRule, ...]:
         if not isinstance(raw, list):
             return ()
 
@@ -132,11 +161,16 @@ class RuleEngine:
             description = str(item.get("description", "")).strip()
             if not signal_name or not signal_type:
                 continue
+            if "required" in item:
+                required = bool(item.get("required"))
+            else:
+                required = default_required
             signals.append(
                 SignalRule(
                     name=signal_name,
                     signal_type=signal_type,
                     description=description,
+                    required=required,
                 )
             )
         return tuple(signals)

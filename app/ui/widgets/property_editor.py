@@ -6,6 +6,7 @@ from typing import Mapping
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -52,6 +53,10 @@ class PropertyEditorWidget(QWidget):
         self.do_start_edit = QLineEdit()
         self.ai_start_edit = QLineEdit()
         self.ao_start_edit = QLineEdit()
+        self.use_di_start_check = QCheckBox("Use DI Start")
+        self.use_do_start_check = QCheckBox("Use DO Start")
+        self.use_ai_start_check = QCheckBox("Use AI Start")
+        self.use_ao_start_check = QCheckBox("Use AO Start")
         self.assign_addresses_button = QPushButton("Assign Addresses")
         self.clear_addresses_button = QPushButton("Clear Addresses")
         self.conflict_status_label = QLabel("")
@@ -81,6 +86,11 @@ class PropertyEditorWidget(QWidget):
         self.clear_addresses_button.clicked.connect(
             self.clear_addresses_requested.emit
         )
+        self.use_di_start_check.toggled.connect(self._sync_start_edit_enabled)
+        self.use_do_start_check.toggled.connect(self._sync_start_edit_enabled)
+        self.use_ai_start_check.toggled.connect(self._sync_start_edit_enabled)
+        self.use_ao_start_check.toggled.connect(self._sync_start_edit_enabled)
+        self._sync_start_edit_enabled()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -110,11 +120,21 @@ class PropertyEditorWidget(QWidget):
         ):
             edit.setPlaceholderText(placeholder)
             edit.setClearButtonEnabled(True)
-            edit.setMaximumWidth(120)
-        plc_form.addRow("DI Start", self.di_start_edit)
-        plc_form.addRow("DO Start", self.do_start_edit)
-        plc_form.addRow("AI Start", self.ai_start_edit)
-        plc_form.addRow("AO Start", self.ao_start_edit)
+
+        for check, edit in (
+            (self.use_di_start_check, self.di_start_edit),
+            (self.use_do_start_check, self.do_start_edit),
+            (self.use_ai_start_check, self.ai_start_edit),
+            (self.use_ao_start_check, self.ao_start_edit),
+        ):
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(8)
+            check.setMinimumWidth(110)
+            row_layout.addWidget(check)
+            row_layout.addWidget(edit, stretch=1)
+            plc_form.addRow(row)
 
         address_buttons = QHBoxLayout()
         address_buttons.setContentsMargins(0, 0, 0, 0)
@@ -134,7 +154,7 @@ class PropertyEditorWidget(QWidget):
         properties_layout.setContentsMargins(0, 0, 0, 0)
         properties_layout.setSpacing(10)
         properties_layout.addWidget(details, stretch=1)
-        properties_layout.addWidget(plc_address_box, stretch=0)
+        properties_layout.addWidget(plc_address_box, stretch=1)
 
         recommendation_box = QGroupBox("Recommended Signals")
         recommendation_layout = QVBoxLayout(recommendation_box)
@@ -220,7 +240,16 @@ class PropertyEditorWidget(QWidget):
         self.recommendation_table.setRowCount(0)
         self.recommendation_table.blockSignals(False)
         self.signal_editor.clear()
-        self.set_plc_start_addresses("", "", "", "")
+        self.set_plc_start_settings(
+            di_start="",
+            do_start="",
+            ai_start="",
+            ao_start="",
+            use_di=False,
+            use_do=False,
+            use_ai=False,
+            use_ao=False,
+        )
         self.set_address_conflict_status("")
         self.set_device_io_summary(
             {"DI": 0, "DO": 0, "AI": 0, "AO": 0, "TOTAL": 0}
@@ -239,11 +268,15 @@ class PropertyEditorWidget(QWidget):
         self._category_value.setText(device.category)
         self._type_value.setText(device.type)
         self._description_value.setText(device.description or "-")
-        self.set_plc_start_addresses(
-            device.di_start_address,
-            device.do_start_address,
-            device.ai_start_address,
-            device.ao_start_address,
+        self.set_plc_start_settings(
+            di_start=device.di_start_address,
+            do_start=device.do_start_address,
+            ai_start=device.ai_start_address,
+            ao_start=device.ao_start_address,
+            use_di=device.use_di_start_address,
+            use_do=device.use_do_start_address,
+            use_ai=device.use_ai_start_address,
+            use_ao=device.use_ao_start_address,
         )
 
         recommendations = () if result is None else result.recommendations
@@ -251,27 +284,56 @@ class PropertyEditorWidget(QWidget):
         self.show_device_signals(device.signals)
         self._stack.setCurrentIndex(1)
 
-    def set_plc_start_addresses(
+    def set_plc_start_settings(
         self,
+        *,
         di_start: str,
         do_start: str,
         ai_start: str,
         ao_start: str,
+        use_di: bool,
+        use_do: bool,
+        use_ai: bool,
+        use_ao: bool,
     ) -> None:
-        """Load PLC start address fields for the selected device."""
+        """Load PLC start address fields and Use checkboxes."""
         self.di_start_edit.setText(di_start)
         self.do_start_edit.setText(do_start)
         self.ai_start_edit.setText(ai_start)
         self.ao_start_edit.setText(ao_start)
 
-    def read_plc_start_addresses(self) -> tuple[str, str, str, str]:
-        """Return (DI, DO, AI, AO) start address field values."""
+        for check, checked in (
+            (self.use_di_start_check, use_di),
+            (self.use_do_start_check, use_do),
+            (self.use_ai_start_check, use_ai),
+            (self.use_ao_start_check, use_ao),
+        ):
+            check.blockSignals(True)
+            check.setChecked(checked)
+            check.blockSignals(False)
+        self._sync_start_edit_enabled()
+
+    def read_plc_start_settings(
+        self,
+    ) -> tuple[str, str, str, str, bool, bool, bool, bool]:
+        """Return start addresses and Use flags from the form."""
         return (
             self.di_start_edit.text().strip(),
             self.do_start_edit.text().strip(),
             self.ai_start_edit.text().strip(),
             self.ao_start_edit.text().strip(),
+            self.use_di_start_check.isChecked(),
+            self.use_do_start_check.isChecked(),
+            self.use_ai_start_check.isChecked(),
+            self.use_ao_start_check.isChecked(),
         )
+
+    def _sync_start_edit_enabled(self, *_args: object) -> None:
+        """Enable start-address edits only when their Use checkbox is checked."""
+        self.di_start_edit.setEnabled(self.use_di_start_check.isChecked())
+        self.do_start_edit.setEnabled(self.use_do_start_check.isChecked())
+        self.ai_start_edit.setEnabled(self.use_ai_start_check.isChecked())
+        self.ao_start_edit.setEnabled(self.use_ao_start_check.isChecked())
 
     def set_address_conflict_status(self, message: str) -> None:
         """Show or clear the project address conflict status line."""

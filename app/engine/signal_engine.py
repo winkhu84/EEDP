@@ -57,13 +57,12 @@ class SignalEngine:
             return []
 
         signals: list[Signal] = []
-        for item in rule.required_signals:
-            signal = self._from_rule_item(item, required=True, enabled=True)
-            device.add_signal(signal)
-            signals.append(signal)
-
-        for item in rule.optional_signals:
-            signal = self._from_rule_item(item, required=False, enabled=False)
+        for item in rule.signals:
+            signal = self._from_rule_item(
+                item,
+                required=item.required,
+                enabled=item.required,
+            )
             device.add_signal(signal)
             signals.append(signal)
 

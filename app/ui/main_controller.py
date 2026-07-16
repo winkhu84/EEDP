@@ -226,8 +226,8 @@ class MainController:
         # Persist any pending signal-editor edits before assigning.
         self._on_signal_editor_changed()
 
-        di_start, do_start, ai_start, ao_start = (
-            self._view.property_editor.read_plc_start_addresses()
+        di_start, do_start, ai_start, ao_start, use_di, use_do, use_ai, use_ao = (
+            self._view.property_editor.read_plc_start_settings()
         )
         apply_start_addresses(
             device,
@@ -235,6 +235,10 @@ class MainController:
             do_start=do_start,
             ai_start=ai_start,
             ao_start=ao_start,
+            use_di=use_di,
+            use_do=use_do,
+            use_ai=use_ai,
+            use_ao=use_ao,
         )
 
         result = assign_device_addresses(device)
@@ -245,6 +249,13 @@ class MainController:
                 "\n".join(result.errors) or "Address assignment failed.",
             )
             return
+
+        if result.infos:
+            QMessageBox.information(
+                self._view,
+                "Assign Addresses",
+                "\n".join(result.infos),
+            )
 
         self._view.property_editor.show_device_signals(device.signals)
         self._refresh_address_conflict_status(show_dialog=True)
@@ -269,7 +280,16 @@ class MainController:
             return
 
         clear_device_addresses(device)
-        self._view.property_editor.set_plc_start_addresses("", "", "", "")
+        self._view.property_editor.set_plc_start_settings(
+            di_start="",
+            do_start="",
+            ai_start="",
+            ao_start="",
+            use_di=False,
+            use_do=False,
+            use_ai=False,
+            use_ao=False,
+        )
         self._view.property_editor.show_device_signals(device.signals)
         self._refresh_address_conflict_status(show_dialog=False)
         self._refresh_io_summaries()

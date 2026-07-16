@@ -53,6 +53,7 @@ class AssignResult:
 
     ok: bool
     errors: tuple[str, ...] = ()
+    infos: tuple[str, ...] = ()
     conflicts: tuple[AddressConflict, ...] = ()
 
 
@@ -127,12 +128,33 @@ def _start_for_io_type(device: Device, io_type: str) -> str:
     return mapping[io_type].strip()
 
 
+def _use_for_io_type(device: Device, io_type: str) -> bool:
+    mapping = {
+        "DI": device.use_di_start_address,
+        "DO": device.use_do_start_address,
+        "AI": device.use_ai_start_address,
+        "AO": device.use_ao_start_address,
+    }
+    return bool(mapping[io_type])
+
+
 def _enabled_of_type(signals: list[Signal], io_type: str) -> list[Signal]:
     return [
         signal
         for signal in signals
         if signal.enabled and signal.io_type.upper() == io_type
     ]
+
+
+def apply_default_use_start_flags(device: Device) -> None:
+    """Default Use-Start checkboxes from currently enabled signals.
+
+    Does not set start address text values.
+    """
+    device.use_di_start_address = bool(_enabled_of_type(device.signals, "DI"))
+    device.use_do_start_address = bool(_enabled_of_type(device.signals, "DO"))
+    device.use_ai_start_address = bool(_enabled_of_type(device.signals, "AI"))
+    device.use_ao_start_address = bool(_enabled_of_type(device.signals, "AO"))
 
 
 def _validate_start_address(io_type: str, start: str) -> str | None:
@@ -161,47 +183,60 @@ def _validate_start_address(io_type: str, start: str) -> str | None:
     return None
 
 
-def validate_device_start_addresses(device: Device) -> list[str]:
-    """Validate start addresses against enabled signals on the device."""
+def validate_device_start_addresses(
+    device: Device,
+) -> tuple[list[str], list[str]]:
+    """Validate start addresses for checked I/O types.
+
+    Returns (errors, infos).
+    """
     errors: list[str] = []
+    infos: list[str] = []
     for io_type in _IO_TYPES:
-        enabled = _enabled_of_type(device.signals, io_type)
-        start = _start_for_io_type(device, io_type)
-        if not enabled:
+        if not _use_for_io_type(device, io_type):
             continue
+
+        enabled = _enabled_of_type(device.signals, io_type)
+        if not enabled:
+            infos.append(
+                f"No enabled {io_type} signals exist for this Device."
+            )
+            continue
+
+        start = _start_for_io_type(device, io_type)
         if not start:
             errors.append(
-                f"{io_type} Start Address is required when enabled "
-                f"{io_type} signals exist."
+                f"{io_type} Start Address is required when Use {io_type} Start "
+                f"is checked and enabled {io_type} signals exist."
             )
             continue
         message = _validate_start_address(io_type, start)
         if message is not None:
             errors.append(message)
-    return errors
+    return errors, infos
 
 
 def assign_device_addresses(device: Device) -> AssignResult:
-    """Assign sequential addresses to enabled signals; clear disabled ones.
+    """Assign addresses for checked I/O types; clear unchecked / disabled.
 
-    Preserves Device Signals list order. Does not auto-save start fields —
-    caller should set di/do/ai/ao_start_address before calling.
+    Preserves Device Signals list order within each I/O type.
     """
-    errors = validate_device_start_addresses(device)
+    errors, infos = validate_device_start_addresses(device)
     if errors:
-        return AssignResult(ok=False, errors=tuple(errors))
-
-    for signal in device.signals:
-        if not signal.enabled:
-            signal.address = ""
+        return AssignResult(ok=False, errors=tuple(errors), infos=tuple(infos))
 
     counters = {"DI": 0, "DO": 0, "AI": 0, "AO": 0}
     for signal in device.signals:
-        if not signal.enabled:
-            continue
         io_type = signal.io_type.upper()
+        if not signal.enabled:
+            signal.address = ""
+            continue
         if io_type not in counters:
             continue
+        if not _use_for_io_type(device, io_type):
+            signal.address = ""
+            continue
+
         start = _start_for_io_type(device, io_type)
         offset = counters[io_type]
         if io_type in {"DI", "DO"}:
@@ -210,30 +245,45 @@ def assign_device_addresses(device: Device) -> AssignResult:
             signal.address = increment_analog_address(start, offset)
         counters[io_type] += 1
 
-    return AssignResult(ok=True)
+    return AssignResult(ok=True, infos=tuple(infos))
 
 
 def assign_project_addresses(devices: list[Device] | tuple[Device, ...]) -> AssignResult:
-    """Assign addresses for every device. Stops on first device error."""
+    """Assign addresses for every device. Stops collecting when any device fails."""
     all_errors: list[str] = []
+    all_infos: list[str] = []
     for device in devices:
         result = assign_device_addresses(device)
+        for info in result.infos:
+            all_infos.append(f"{device.tag}: {info}")
         if not result.ok:
             for error in result.errors:
                 all_errors.append(f"{device.tag}: {error}")
     if all_errors:
-        return AssignResult(ok=False, errors=tuple(all_errors))
+        return AssignResult(
+            ok=False,
+            errors=tuple(all_errors),
+            infos=tuple(all_infos),
+        )
 
     conflicts = find_address_conflicts(devices)
-    return AssignResult(ok=True, conflicts=tuple(conflicts))
+    return AssignResult(
+        ok=True,
+        infos=tuple(all_infos),
+        conflicts=tuple(conflicts),
+    )
 
 
 def clear_device_addresses(device: Device) -> None:
-    """Clear start addresses and all signal.address values on the device."""
+    """Clear start addresses, Use flags, and all signal.address values."""
     device.di_start_address = ""
     device.do_start_address = ""
     device.ai_start_address = ""
     device.ao_start_address = ""
+    device.use_di_start_address = False
+    device.use_do_start_address = False
+    device.use_ai_start_address = False
+    device.use_ao_start_address = False
     for signal in device.signals:
         signal.address = ""
 
@@ -285,9 +335,17 @@ def apply_start_addresses(
     do_start: str,
     ai_start: str,
     ao_start: str,
+    use_di: bool,
+    use_do: bool,
+    use_ai: bool,
+    use_ao: bool,
 ) -> None:
-    """Store UI start-address values onto the device."""
+    """Store UI start-address values and Use flags onto the device."""
     device.di_start_address = di_start.strip()
     device.do_start_address = do_start.strip()
     device.ai_start_address = ai_start.strip()
     device.ao_start_address = ao_start.strip()
+    device.use_di_start_address = use_di
+    device.use_do_start_address = use_do
+    device.use_ai_start_address = use_ai
+    device.use_ao_start_address = use_ao

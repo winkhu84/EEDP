@@ -215,6 +215,10 @@ class DeviceManager:
             do_start_address=source.do_start_address,
             ai_start_address=source.ai_start_address,
             ao_start_address=source.ao_start_address,
+            use_di_start_address=source.use_di_start_address,
+            use_do_start_address=source.use_do_start_address,
+            use_ai_start_address=source.use_ai_start_address,
+            use_ao_start_address=source.use_ao_start_address,
         )
         self._devices.append(device)
         return device

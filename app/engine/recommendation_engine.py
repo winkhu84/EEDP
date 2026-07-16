@@ -5,6 +5,7 @@ Produces signal recommendations and Signal objects for a Device.
 
 from __future__ import annotations
 
+from app.engine.address_manager import apply_default_use_start_flags
 from app.engine.rule_engine import DeviceRule, RuleEngine, UNKNOWN_DEVICE
 from app.engine.signal_engine import SignalEngine
 from app.model.device import Device
@@ -45,6 +46,7 @@ class RecommendationEngine:
         """Create Signal objects on the device and return UI recommendation data."""
         rule = self._rule_engine.load_rule(device.type)
         self._signal_engine.create_signals_from_rule(device, rule)
+        apply_default_use_start_flags(device)
         return self._to_result(device, rule)
 
     def ensure_signals(self, device: Device) -> RecommendationResult:
@@ -83,16 +85,8 @@ class RecommendationEngine:
             Recommendation(
                 name=item.name,
                 signal_type=item.signal_type,
-                required=True,
+                required=item.required,
             )
-            for item in rule.required_signals
+            for item in rule.signals
         ]
-        items.extend(
-            Recommendation(
-                name=item.name,
-                signal_type=item.signal_type,
-                required=False,
-            )
-            for item in rule.optional_signals
-        )
         return tuple(items)

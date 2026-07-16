@@ -3,6 +3,7 @@
 from app.engine.address_manager import (
     AddressConflict,
     AssignResult,
+    apply_default_use_start_flags,
     apply_start_addresses,
     assign_device_addresses,
     assign_project_addresses,
@@ -54,6 +55,7 @@ __all__ = [
     "SignalEngine",
     "SignalRule",
     "UNKNOWN_DEVICE",
+    "apply_default_use_start_flags",
     "apply_start_addresses",
     "assign_device_addresses",
     "assign_project_addresses",
