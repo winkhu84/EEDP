@@ -15,6 +15,7 @@ from app.engine.address_manager import (
     format_conflict_message,
 )
 from app.engine.device_manager import DeviceDraft, DeviceManager, suggest_next_tag
+from app.engine.fc_io_generator import generate_project_rows
 from app.engine.io_list_parser import IoListParser
 from app.engine.io_summary_engine import summarize_device, summarize_project
 from app.engine.plc_card_calculator import calculate_project_cards
@@ -22,6 +23,7 @@ from app.engine.recommendation_engine import RecommendationEngine
 from app.engine.signal_engine import SignalEngine
 from app.model.plc_card_config import PlcCardConfig, default_plc_card_configurations
 from app.ui.dialogs.address_usage_dialog import AddressUsageDialog
+from app.ui.dialogs.fc_io_preview_dialog import FCIOPreviewDialog
 from app.ui.main_window import MainWindow
 
 
@@ -51,6 +53,7 @@ class MainController:
         toolbar.new_project_button.clicked.connect(self._on_new_project)
         toolbar.open_project_button.clicked.connect(self._on_open_project)
         toolbar.save_project_button.clicked.connect(self._on_save_project)
+        toolbar.fc_io_preview_button.clicked.connect(self._on_fc_io_preview)
         toolbar.generate_button.clicked.connect(self._on_generate)
 
         toolbar.add_device_button.clicked.connect(self._on_add_device)
@@ -490,6 +493,18 @@ class MainController:
 
     def _on_save_project(self) -> None:
         return
+
+    def _on_fc_io_preview(self) -> None:
+        def refresh():
+            return generate_project_rows(self._device_manager.devices)
+
+        result = refresh()
+        dialog = FCIOPreviewDialog(
+            result,
+            refresh_callback=refresh,
+            parent=self._view,
+        )
+        dialog.exec()
 
     def _on_generate(self) -> None:
         conflicts = find_address_conflicts(self._device_manager.devices)

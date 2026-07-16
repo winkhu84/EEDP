@@ -32,6 +32,14 @@ from app.engine.device_manager import (
     expand_sequential_tags,
     suggest_next_tag,
 )
+from app.engine.fc_io_generator import (
+    FCIOGenerationResult,
+    FCIOIssue,
+    generate_device_rows,
+    generate_project_rows,
+    sort_fc_io_rows,
+    validate_fc_io_rows,
+)
 from app.engine.io_list_parser import IoListParseResult, IoListParser
 from app.engine.io_summary_engine import summarize_device, summarize_project
 from app.engine.plc_card_calculator import (
@@ -58,6 +66,8 @@ __all__ = [
     "DeviceDraft",
     "DeviceManager",
     "DeviceRule",
+    "FCIOGenerationResult",
+    "FCIOIssue",
     "IoListParseResult",
     "IoListParser",
     "PlcCardRequirement",
@@ -81,6 +91,8 @@ __all__ = [
     "find_address_assignments",
     "find_address_conflicts",
     "format_conflict_message",
+    "generate_device_rows",
+    "generate_project_rows",
     "group_digital_addresses_by_card",
     "increment_analog_address",
     "increment_digital_address",
@@ -88,8 +100,10 @@ __all__ = [
     "parse_digital_address",
     "resolve_device_category",
     "resolve_device_type",
+    "sort_fc_io_rows",
     "suggest_next_tag",
     "summarize_device",
     "summarize_project",
     "validate_device_start_addresses",
+    "validate_fc_io_rows",
 ]
