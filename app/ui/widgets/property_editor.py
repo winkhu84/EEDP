@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QSpinBox,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -20,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.common.constants import NO_DEVICE_SELECTED
+from app.engine.plc_card_calculator import PlcCardRequirement
 from app.model.device import Device
 from app.model.recommendation import Recommendation, RecommendationResult
 from app.model.signal import Signal as DeviceSignal
@@ -30,7 +30,6 @@ class PropertyEditorWidget(QWidget):
     """Displays device properties, recommendations, signals, and I/O summaries."""
 
     recommendation_changed = Signal()
-    quantity_changed = Signal(int)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -44,7 +43,6 @@ class PropertyEditorWidget(QWidget):
         self._category_value = QLabel("-")
         self._type_value = QLabel("-")
         self._description_value = QLabel("-")
-        self.quantity_spin = QSpinBox()
 
         self.recommendation_table = QTableWidget(0, 4)
         self.signal_editor = SignalEditorWidget()
@@ -61,9 +59,10 @@ class PropertyEditorWidget(QWidget):
         self._project_ao = QLabel("0")
         self._project_total = QLabel("0")
 
+        self.plc_card_table = QTableWidget(0, 7)
+
         self._build_ui()
         self.recommendation_table.itemChanged.connect(self._on_item_changed)
-        self.quantity_spin.valueChanged.connect(self.quantity_changed.emit)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -81,11 +80,6 @@ class PropertyEditorWidget(QWidget):
         form.addRow("Category", self._category_value)
         form.addRow("Type", self._type_value)
         form.addRow("Description", self._description_value)
-
-        self.quantity_spin.setMinimum(1)
-        self.quantity_spin.setMaximum(100)
-        self.quantity_spin.setValue(1)
-        form.addRow("Quantity", self.quantity_spin)
 
         recommendation_box = QGroupBox("Recommended Signals")
         recommendation_layout = QVBoxLayout(recommendation_box)
@@ -137,6 +131,7 @@ class PropertyEditorWidget(QWidget):
             ao_label=self._project_ao,
             total_label=self._project_total,
         )
+        plc_card_box = self._build_plc_card_panel()
 
         summary_row = QWidget()
         summary_row.setObjectName("ioSummaryRow")
@@ -145,15 +140,7 @@ class PropertyEditorWidget(QWidget):
         summary_layout.setSpacing(8)
         summary_layout.addWidget(device_io_box, stretch=1)
         summary_layout.addWidget(project_io_box, stretch=1)
-
-        summary_band = QWidget()
-        summary_band.setObjectName("ioSummaryBand")
-        summary_band_layout = QHBoxLayout(summary_band)
-        summary_band_layout.setContentsMargins(0, 0, 0, 0)
-        summary_band_layout.setSpacing(0)
-        # Occupy ~1/3 of content width; keep left-aligned (stretch 1 + spacer 2).
-        summary_band_layout.addWidget(summary_row, stretch=1)
-        summary_band_layout.addStretch(2)
+        summary_layout.addWidget(plc_card_box, stretch=2)
 
         placeholder_page = QWidget()
         placeholder_layout = QVBoxLayout(placeholder_page)
@@ -169,7 +156,7 @@ class PropertyEditorWidget(QWidget):
         self._stack.addWidget(placeholder_page)
         self._stack.addWidget(details_page)
         layout.addWidget(self._stack, stretch=1)
-        layout.addWidget(summary_band)
+        layout.addWidget(summary_row)
         self.clear()
 
     def clear(self) -> None:
@@ -178,12 +165,10 @@ class PropertyEditorWidget(QWidget):
         self.recommendation_table.setRowCount(0)
         self.recommendation_table.blockSignals(False)
         self.signal_editor.clear()
-        self.quantity_spin.blockSignals(True)
-        self.quantity_spin.setValue(1)
-        self.quantity_spin.blockSignals(False)
         self.set_device_io_summary(
             {"DI": 0, "DO": 0, "AI": 0, "AO": 0, "TOTAL": 0}
         )
+        self.set_plc_card_summary(())
         self._stack.setCurrentIndex(0)
 
     def show_device(
@@ -197,10 +182,6 @@ class PropertyEditorWidget(QWidget):
         self._category_value.setText(device.category)
         self._type_value.setText(device.type)
         self._description_value.setText(device.description or "-")
-
-        self.quantity_spin.blockSignals(True)
-        self.quantity_spin.setValue(max(1, int(device.quantity)))
-        self.quantity_spin.blockSignals(False)
 
         recommendations = () if result is None else result.recommendations
         self._populate_recommendations(recommendations, device.signals)
@@ -226,6 +207,74 @@ class PropertyEditorWidget(QWidget):
         self._project_ai.setText(str(summary.get("AI", 0)))
         self._project_ao.setText(str(summary.get("AO", 0)))
         self._project_total.setText(str(summary.get("TOTAL", 0)))
+
+    def set_plc_card_summary(
+        self,
+        requirements: tuple[PlcCardRequirement, ...] | list[PlcCardRequirement],
+    ) -> None:
+        """Populate the PLC Card Summary table."""
+        self.plc_card_table.setRowCount(0)
+        self.plc_card_table.setRowCount(len(requirements))
+        for row, item in enumerate(requirements):
+            values = (
+                item.io_type,
+                item.module_name,
+                str(item.used_channels),
+                str(item.channels_per_card),
+                str(item.required_cards),
+                str(item.total_channels),
+                str(item.spare_channels),
+            )
+            for column, text in enumerate(values):
+                cell = QTableWidgetItem(text)
+                cell.setFlags(
+                    Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+                )
+                if column >= 2:
+                    cell.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                    )
+                self.plc_card_table.setItem(row, column, cell)
+        self.plc_card_table.resizeColumnsToContents()
+
+    def _build_plc_card_panel(self) -> QGroupBox:
+        """Build compact PLC Card Summary table panel."""
+        box = QGroupBox("PLC Card Summary")
+        box.setObjectName("plcCardSummaryPanel")
+        box.setStyleSheet(
+            """
+            QGroupBox#plcCardSummaryPanel {
+                font-weight: 600;
+                border: 1px solid #6A1B9A;
+                border-radius: 4px;
+                margin-top: 8px;
+                padding-top: 4px;
+            }
+            QGroupBox#plcCardSummaryPanel::title {
+                subcontrol-origin: margin;
+                left: 8px;
+                padding: 0 4px;
+                color: #6A1B9A;
+            }
+            """
+        )
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(2)
+
+        self.plc_card_table.setObjectName("plcCardSummaryTable")
+        self.plc_card_table.setHorizontalHeaderLabels(
+            ["I/O", "Module", "Used", "Capacity", "Cards", "Total CH", "Spare"]
+        )
+        header = self.plc_card_table.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setMinimumSectionSize(40)
+        self.plc_card_table.verticalHeader().setVisible(False)
+        self.plc_card_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.plc_card_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        self.plc_card_table.setMaximumHeight(140)
+        layout.addWidget(self.plc_card_table)
+        return box
 
     @staticmethod
     def _build_summary_panel(

@@ -15,7 +15,7 @@ def _empty_summary() -> dict[str, int]:
 
 
 def _count_enabled_signals(device: Device) -> dict[str, int]:
-    """Count enabled signals on one device (quantity not applied)."""
+    """Count enabled signals on one device."""
     counts = {"DI": 0, "DO": 0, "AI": 0, "AO": 0}
     for signal in device.signals:
         if not signal.enabled:
@@ -34,18 +34,14 @@ def summarize_device(
 ) -> dict[str, int]:
     """Summarize enabled I/O for one device.
 
-    Device panel usage: apply_quantity=False (raw enabled signals).
-    Project contribution usage: apply_quantity=True.
+    Each stored Device represents one physical unit (quantity = 1).
+    apply_quantity is ignored and kept only for call-site compatibility.
     """
+    del apply_quantity  # quantity multiplication removed
     if device is None:
         return _empty_summary()
 
     counts = _count_enabled_signals(device)
-    if apply_quantity:
-        factor = max(int(device.quantity), 0)
-        for key in ("DI", "DO", "AI", "AO"):
-            counts[key] *= factor
-
     return {
         "DI": counts["DI"],
         "DO": counts["DO"],
@@ -56,13 +52,13 @@ def summarize_device(
 
 
 def summarize_project(project_or_devices: Iterable[Device] | None) -> dict[str, int]:
-    """Summarize enabled I/O across all devices, multiplying each by quantity."""
+    """Summarize enabled I/O across all individual devices."""
     if project_or_devices is None:
         return _empty_summary()
 
     totals = {"DI": 0, "DO": 0, "AI": 0, "AO": 0}
     for device in project_or_devices:
-        part = summarize_device(device, apply_quantity=True)
+        part = summarize_device(device)
         for key in ("DI", "DO", "AI", "AO"):
             totals[key] += part[key]
 

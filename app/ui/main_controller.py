@@ -7,11 +7,13 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
-from app.engine.device_manager import DeviceDraft, DeviceManager
+from app.engine.device_manager import DeviceDraft, DeviceManager, suggest_next_tag
 from app.engine.io_list_parser import IoListParser
 from app.engine.io_summary_engine import summarize_device, summarize_project
+from app.engine.plc_card_calculator import calculate_project_cards
 from app.engine.recommendation_engine import RecommendationEngine
 from app.engine.signal_engine import SignalEngine
+from app.model.plc_card_config import PlcCardConfig, default_plc_card_configurations
 from app.ui.main_window import MainWindow
 
 
@@ -31,6 +33,9 @@ class MainController:
         self._recommendation_engine = recommendation_engine or RecommendationEngine()
         self._io_list_parser = io_list_parser or IoListParser()
         self._signal_engine = signal_engine or SignalEngine()
+        self._plc_card_configs: tuple[PlcCardConfig, ...] = (
+            default_plc_card_configurations()
+        )
 
     def bind(self) -> None:
         """Connect view signals to controller handlers."""
@@ -52,7 +57,6 @@ class MainController:
         self._view.property_editor.recommendation_changed.connect(
             self._on_recommendation_changed
         )
-        self._view.property_editor.quantity_changed.connect(self._on_quantity_changed)
 
         signal_editor = self._view.property_editor.signal_editor
         signal_editor.signal_changed.connect(self._on_signal_editor_changed)
@@ -79,13 +83,26 @@ class MainController:
             description=panel.description_edit.text().strip(),
             quantity=panel.quantity_spin.value(),
         )
-        device = self._device_manager.add_device(draft)
-        if device is None:
+        result = self._device_manager.add_devices_from_draft(draft)
+        if not result.ok:
+            message = result.error or "Failed to add device."
+            QMessageBox.warning(self._view, "Add Device", message)
             return
 
-        item = self._view.project_tree.add_device(device)
-        if item is not None:
-            self._view.project_tree.select_device_item(item)
+        last_item = None
+        for device in result.devices:
+            self._recommendation_engine.ensure_signals(device)
+            item = self._view.project_tree.add_device(device)
+            if item is not None:
+                last_item = item
+        if last_item is not None:
+            self._view.project_tree.select_device_item(last_item)
+
+        panel.quantity_spin.setValue(1)
+        last_tag = result.devices[-1].tag
+        panel.tag_edit.setText(
+            suggest_next_tag(last_tag, self._device_manager.tags())
+        )
         self._refresh_io_summaries()
 
     def _on_remove_device(self) -> None:
@@ -195,13 +212,6 @@ class MainController:
                 if signal.name in states:
                     signal.enabled = states[signal.name]
             self._view.property_editor.show_device_signals(device.signals)
-        self._refresh_io_summaries()
-
-    def _on_quantity_changed(self, value: int) -> None:
-        device = self._selected_device()
-        if device is None:
-            return
-        device.quantity = max(1, int(value))
         self._refresh_io_summaries()
 
     def _on_signal_editor_changed(self) -> None:
@@ -318,8 +328,13 @@ class MainController:
         device = self._selected_device()
         device_summary = summarize_device(device, apply_quantity=False)
         project_summary = summarize_project(self._device_manager.devices)
+        plc_requirements = calculate_project_cards(
+            project_summary,
+            self._plc_card_configs,
+        )
         self._view.property_editor.set_device_io_summary(device_summary)
         self._view.property_editor.set_project_io_summary(project_summary)
+        self._view.property_editor.set_plc_card_summary(plc_requirements)
 
     def _update_device_action_state(self) -> None:
         has_device = self._view.project_tree.selected_device_id() is not None
