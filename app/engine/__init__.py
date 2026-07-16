@@ -37,6 +37,7 @@ from app.engine.fc_io_generator import (
     FCIOIssue,
     generate_device_rows,
     generate_project_rows,
+    sort_devices,
     sort_fc_io_rows,
     validate_fc_io_rows,
 )
@@ -100,6 +101,7 @@ __all__ = [
     "parse_digital_address",
     "resolve_device_category",
     "resolve_device_type",
+    "sort_devices",
     "sort_fc_io_rows",
     "suggest_next_tag",
     "summarize_device",

@@ -5,6 +5,10 @@ Wires the view to business services. No domain rules inline.
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
 from app.engine.address_manager import (
@@ -21,6 +25,11 @@ from app.engine.io_summary_engine import summarize_device, summarize_project
 from app.engine.plc_card_calculator import calculate_project_cards
 from app.engine.recommendation_engine import RecommendationEngine
 from app.engine.signal_engine import SignalEngine
+from app.export.fc_io_excel_exporter import (
+    build_project_export_info,
+    default_export_filename,
+    export_fc_io_workbook,
+)
 from app.model.plc_card_config import PlcCardConfig, default_plc_card_configurations
 from app.ui.dialogs.address_usage_dialog import AddressUsageDialog
 from app.ui.dialogs.fc_io_preview_dialog import FCIOPreviewDialog
@@ -504,7 +513,115 @@ class MainController:
             refresh_callback=refresh,
             parent=self._view,
         )
+        dialog.export_excel_requested.connect(
+            lambda: self._on_export_fc_io_excel(dialog)
+        )
         dialog.exec()
+
+    def _project_export_info(self):
+        toolbar = self._view.toolbar
+        return build_project_export_info(
+            customer=toolbar.customer_combo.currentText(),
+            project_name=toolbar.project_name_edit.text(),
+            revision="",
+        )
+
+    def _on_export_fc_io_excel(self, dialog: FCIOPreviewDialog) -> None:
+        result = dialog.result
+        if result.error_count > 0:
+            box = QMessageBox(dialog)
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.setWindowTitle("Export Excel")
+            box.setText("Validation errors exist. Export anyway?")
+            export_anyway = box.addButton(
+                "Export Anyway",
+                QMessageBox.ButtonRole.AcceptRole,
+            )
+            cancel = box.addButton(QMessageBox.StandardButton.Cancel)
+            box.setDefaultButton(cancel)
+            box.exec()
+            if box.clickedButton() is not export_anyway:
+                return
+
+        project_info = self._project_export_info()
+        default_name = default_export_filename(project_info)
+        file_path, _ = QFileDialog.getSaveFileName(
+            dialog,
+            "Export FC_IO Excel",
+            default_name,
+            "Excel Files (*.xlsx)",
+        )
+        if not file_path:
+            return
+
+        path = Path(file_path)
+        if path.suffix.lower() != ".xlsx":
+            path = path.with_suffix(".xlsx")
+
+        if path.exists():
+            overwrite = QMessageBox.question(
+                dialog,
+                "Export Excel",
+                f"File already exists:\n{path}\n\nOverwrite?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if overwrite != QMessageBox.StandardButton.Yes:
+                return
+
+        try:
+            export_fc_io_workbook(
+                path,
+                devices=self._device_manager.devices,
+                result=result,
+                project_info=project_info,
+                card_configurations=self._plc_card_configs,
+            )
+        except PermissionError:
+            QMessageBox.critical(
+                dialog,
+                "Export Excel",
+                (
+                    "Permission denied.\n"
+                    "The file may be open in Excel or you may not have "
+                    "write access to this location."
+                ),
+            )
+            return
+        except OSError as exc:
+            QMessageBox.critical(
+                dialog,
+                "Export Excel",
+                f"Failed to export Excel file:\n{exc}",
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 - surface unexpected export errors
+            QMessageBox.critical(
+                dialog,
+                "Export Excel",
+                f"Export failed:\n{exc}",
+            )
+            return
+
+        message = (
+            "FC_IO Excel export completed.\n\n"
+            f"File: {path}\n"
+            f"Total FC_IO rows: {result.total_count}\n"
+            f"Warnings: {result.warning_count}\n"
+            f"Errors: {result.error_count}"
+        )
+        done = QMessageBox(dialog)
+        done.setIcon(QMessageBox.Icon.Information)
+        done.setWindowTitle("Export Excel")
+        done.setText(message)
+        open_folder_button = done.addButton(
+            "Open Folder",
+            QMessageBox.ButtonRole.ActionRole,
+        )
+        done.addButton(QMessageBox.StandardButton.Ok)
+        done.exec()
+        if done.clickedButton() is open_folder_button:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent.resolve())))
 
     def _on_generate(self) -> None:
         conflicts = find_address_conflicts(self._device_manager.devices)

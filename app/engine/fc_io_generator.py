@@ -24,8 +24,11 @@ class FCIOIssue:
 
     severity: str  # "warning" | "error"
     message: str
+    code: str = ""
+    area: str = ""
     device_tag: str = ""
     signal_name: str = ""
+    io_type: str = ""
     plc_address: str = ""
 
 
@@ -123,6 +126,20 @@ def sort_fc_io_rows(rows: Sequence[FCIORow]) -> list[FCIORow]:
     return sorted(rows, key=sort_key)
 
 
+def sort_devices(devices: Sequence[Device]) -> list[Device]:
+    """Sort devices by Area → Device Type → Tag (natural)."""
+
+    def sort_key(device: Device) -> tuple:
+        area_rank = _AREA_ORDER.get(device.area.strip().upper(), len(_AREA_ORDER) + 1)
+        return (
+            area_rank,
+            device.type.casefold(),
+            natural_tag_key(device.tag),
+        )
+
+    return sorted(devices, key=sort_key)
+
+
 def _count_by_io(rows: Sequence[FCIORow]) -> dict[str, int]:
     counts = {"DI": 0, "DO": 0, "AI": 0, "AO": 0}
     for row in rows:
@@ -152,6 +169,7 @@ def validate_fc_io_rows(
                 warnings.append(
                     FCIOIssue(
                         severity="warning",
+                        code="DUPLICATE_DEVICE_TAG",
                         message=f"Duplicate Device Tag: {tag}",
                         device_tag=tag,
                     )
@@ -163,17 +181,23 @@ def validate_fc_io_rows(
             warnings.append(
                 FCIOIssue(
                     severity="warning",
+                    code="BLANK_DEVICE_TAG",
                     message="Blank Device Tag",
+                    area=row.area,
                     signal_name=row.signal_name,
+                    io_type=row.io_type,
                 )
             )
         elif row.device_tag in duplicate_tags and devices is None:
             warnings.append(
                 FCIOIssue(
                     severity="warning",
+                    code="DUPLICATE_DEVICE_TAG",
                     message=f"Duplicate Device Tag: {row.device_tag}",
+                    area=row.area,
                     device_tag=row.device_tag,
                     signal_name=row.signal_name,
+                    io_type=row.io_type,
                 )
             )
 
@@ -181,8 +205,11 @@ def validate_fc_io_rows(
             warnings.append(
                 FCIOIssue(
                     severity="warning",
+                    code="BLANK_SIGNAL_NAME",
                     message="Blank Signal Name",
+                    area=row.area,
                     device_tag=row.device_tag,
+                    io_type=row.io_type,
                 )
             )
 
@@ -191,9 +218,12 @@ def validate_fc_io_rows(
             errors.append(
                 FCIOIssue(
                     severity="error",
+                    code="INVALID_IO_TYPE",
                     message=f"Invalid I/O Type: {row.io_type or '(blank)'}",
+                    area=row.area,
                     device_tag=row.device_tag,
                     signal_name=row.signal_name,
+                    io_type=row.io_type,
                 )
             )
 
@@ -202,9 +232,12 @@ def validate_fc_io_rows(
             warnings.append(
                 FCIOIssue(
                     severity="warning",
+                    code="UNSUPPORTED_AREA",
                     message=f"Unsupported Area: {row.area}",
+                    area=row.area,
                     device_tag=row.device_tag,
                     signal_name=row.signal_name,
+                    io_type=row.io_type,
                 )
             )
 
@@ -212,9 +245,12 @@ def validate_fc_io_rows(
             warnings.append(
                 FCIOIssue(
                     severity="warning",
+                    code="MISSING_PLC_ADDRESS",
                     message="Enabled Signal without PLC Address",
+                    area=row.area,
                     device_tag=row.device_tag,
                     signal_name=row.signal_name,
+                    io_type=row.io_type,
                 )
             )
         else:
@@ -230,9 +266,12 @@ def validate_fc_io_rows(
             errors.append(
                 FCIOIssue(
                     severity="error",
+                    code="DUPLICATE_PLC_ADDRESS",
                     message=f"Duplicate PLC Address {address}: {detail}",
+                    area=item.area,
                     device_tag=item.device_tag,
                     signal_name=item.signal_name,
+                    io_type=item.io_type,
                     plc_address=item.plc_address,
                 )
             )
@@ -251,6 +290,7 @@ def validate_fc_io_rows(
             warnings.append(
                 FCIOIssue(
                     severity="warning",
+                    code="SUMMARY_MISMATCH",
                     message=(
                         "FC_IO totals do not match Project I/O Summary: "
                         + "; ".join(mismatches)

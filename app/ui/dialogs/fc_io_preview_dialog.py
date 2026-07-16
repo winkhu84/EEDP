@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
@@ -49,6 +49,8 @@ _ERROR_BG = QColor("#FFCDD2")
 class FCIOPreviewDialog(QDialog):
     """Resizable preview of generated project FC_IO rows."""
 
+    export_excel_requested = Signal()
+
     def __init__(
         self,
         result: FCIOGenerationResult,
@@ -82,7 +84,19 @@ class FCIOPreviewDialog(QDialog):
         self.io_filter.currentIndexChanged.connect(self._apply_filters)
         self.tag_search.textChanged.connect(self._apply_filters)
         self.refresh_button.clicked.connect(self._on_refresh)
+        self.export_button.clicked.connect(self._on_export_excel)
         self.close_button.clicked.connect(self.accept)
+
+    @property
+    def result(self) -> FCIOGenerationResult:
+        """Latest full-project FC_IO result (not filter-limited)."""
+        return self._result
+
+    def refresh_result(self) -> FCIOGenerationResult:
+        """Regenerate from callback when available and return full result."""
+        if self._refresh_callback is not None:
+            self._load_result(self._refresh_callback())
+        return self._result
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -126,8 +140,8 @@ class FCIOPreviewDialog(QDialog):
 
         buttons = QHBoxLayout()
         buttons.addWidget(self.refresh_button)
-        self.export_button.setEnabled(False)
-        self.export_button.setToolTip("Excel export will be available in a later issue.")
+        self.export_button.setEnabled(True)
+        self.export_button.setToolTip("Export the full project FC_IO to Excel.")
         buttons.addWidget(self.export_button)
         buttons.addStretch(1)
         buttons.addWidget(self.close_button)
@@ -213,6 +227,8 @@ class FCIOPreviewDialog(QDialog):
         self.table.resizeColumnsToContents()
 
     def _on_refresh(self) -> None:
-        if self._refresh_callback is None:
-            return
-        self._load_result(self._refresh_callback())
+        self.refresh_result()
+
+    def _on_export_excel(self) -> None:
+        self.refresh_result()
+        self.export_excel_requested.emit()
