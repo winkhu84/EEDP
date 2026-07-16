@@ -14,17 +14,19 @@ from app.model.recommendation import IoSummary, Recommendation, RecommendationRe
 def build_io_summary(
     enabled_signal_types: list[str] | tuple[str, ...],
 ) -> IoSummary:
-    """Count DI/DO/AI/AO from enabled recommendation signal types."""
+    """Count DI/DO/AI/AO from enabled signal types (legacy helper)."""
     counts = {"DI": 0, "DO": 0, "AI": 0, "AO": 0}
     for signal_type in enabled_signal_types:
-        key = signal_type.strip().upper()
+        key = (signal_type or "").strip().upper()
         if key in counts:
             counts[key] += 1
+    total = counts["DI"] + counts["DO"] + counts["AI"] + counts["AO"]
     return IoSummary(
         di=counts["DI"],
         do=counts["DO"],
         ai=counts["AI"],
         ao=counts["AO"],
+        total=total,
     )
 
 

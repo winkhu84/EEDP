@@ -9,7 +9,8 @@ from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
 from app.engine.device_manager import DeviceDraft, DeviceManager
 from app.engine.io_list_parser import IoListParser
-from app.engine.recommendation_engine import RecommendationEngine, build_io_summary
+from app.engine.io_summary_engine import summarize_device, summarize_project
+from app.engine.recommendation_engine import RecommendationEngine
 from app.engine.signal_engine import SignalEngine
 from app.ui.main_window import MainWindow
 
@@ -51,6 +52,7 @@ class MainController:
         self._view.property_editor.recommendation_changed.connect(
             self._on_recommendation_changed
         )
+        self._view.property_editor.quantity_changed.connect(self._on_quantity_changed)
 
         signal_editor = self._view.property_editor.signal_editor
         signal_editor.signal_changed.connect(self._on_signal_editor_changed)
@@ -59,6 +61,7 @@ class MainController:
         signal_editor.duplicate_requested.connect(self._on_duplicate_signal)
 
         self._update_device_action_state()
+        self._refresh_io_summaries()
 
     def _selected_device(self):
         device_id = self._view.project_tree.selected_device_id()
@@ -83,6 +86,7 @@ class MainController:
         item = self._view.project_tree.add_device(device)
         if item is not None:
             self._view.project_tree.select_device_item(item)
+        self._refresh_io_summaries()
 
     def _on_remove_device(self) -> None:
         device = self._selected_device()
@@ -106,6 +110,7 @@ class MainController:
         self._view.project_tree.remove_device_by_id(device.id)
         self._view.property_editor.clear()
         self._update_device_action_state()
+        self._refresh_io_summaries()
 
     def _on_duplicate_device(self) -> None:
         device = self._selected_device()
@@ -119,6 +124,7 @@ class MainController:
         item = self._view.project_tree.add_device(duplicated)
         if item is not None:
             self._view.project_tree.select_device_item(item)
+        self._refresh_io_summaries()
 
     def _on_import_io_list(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
@@ -158,6 +164,7 @@ class MainController:
                 f"({result.unique_tags} unique tags from {result.source_rows} rows).",
                 6000,
             )
+        self._refresh_io_summaries()
 
     def _on_tree_selection_changed(self) -> None:
         self._update_device_action_state()
@@ -165,6 +172,7 @@ class MainController:
         device = self._selected_device()
         if device is None:
             self._view.property_editor.clear()
+            self._refresh_io_summaries()
             return
 
         # Apply recommendation when empty or when legacy Local/Remote Mode exists.
@@ -177,7 +185,7 @@ class MainController:
             print(signal.name)
 
         self._view.property_editor.show_device(device, result)
-        self._refresh_io_summary()
+        self._refresh_io_summaries()
 
     def _on_recommendation_changed(self) -> None:
         device = self._selected_device()
@@ -187,7 +195,14 @@ class MainController:
                 if signal.name in states:
                     signal.enabled = states[signal.name]
             self._view.property_editor.show_device_signals(device.signals)
-        self._refresh_io_summary()
+        self._refresh_io_summaries()
+
+    def _on_quantity_changed(self, value: int) -> None:
+        device = self._selected_device()
+        if device is None:
+            return
+        device.quantity = max(1, int(value))
+        self._refresh_io_summaries()
 
     def _on_signal_editor_changed(self) -> None:
         device = self._selected_device()
@@ -196,15 +211,18 @@ class MainController:
 
         editor = self._view.property_editor.signal_editor
         for row in range(min(editor.row_count(), len(device.signals))):
-            enabled, description, address, remark = editor.read_editable_fields(row)
+            enabled, io_type, description, address, remark = editor.read_editable_fields(
+                row
+            )
             signal = device.signals[row]
             signal.enabled = enabled
+            signal.io_type = io_type
             signal.description = description
             signal.address = address
             signal.remark = remark
 
         self._view.property_editor.sync_recommendation_enables(device.signals)
-        self._refresh_io_summary()
+        self._refresh_io_summaries()
 
     def _on_add_signal(self) -> None:
         device = self._selected_device()
@@ -284,7 +302,7 @@ class MainController:
     def _refresh_selected_device_view(self, device) -> None:
         result = self._recommendation_engine.recommendation_result(device)
         self._view.property_editor.show_device(device, result)
-        self._refresh_io_summary()
+        self._refresh_io_summaries()
 
     @staticmethod
     def _next_signal_name(base_name: str, existing: set[str]) -> str:
@@ -296,9 +314,12 @@ class MainController:
             index += 1
         return f"{base_name} Copy {index}"
 
-    def _refresh_io_summary(self) -> None:
-        summary = build_io_summary(self._view.property_editor.enabled_signal_types())
-        self._view.property_editor.set_io_summary(summary)
+    def _refresh_io_summaries(self) -> None:
+        device = self._selected_device()
+        device_summary = summarize_device(device, apply_quantity=False)
+        project_summary = summarize_project(self._device_manager.devices)
+        self._view.property_editor.set_device_io_summary(device_summary)
+        self._view.property_editor.set_project_io_summary(project_summary)
 
     def _update_device_action_state(self) -> None:
         has_device = self._view.project_tree.selected_device_id() is not None

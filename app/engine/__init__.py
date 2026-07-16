@@ -2,6 +2,7 @@
 
 from app.engine.device_manager import DeviceDraft, DeviceManager, suggest_next_tag
 from app.engine.io_list_parser import IoListParseResult, IoListParser
+from app.engine.io_summary_engine import summarize_device, summarize_project
 from app.engine.recommendation_engine import RecommendationEngine, build_io_summary
 from app.engine.rule_engine import (
     DeviceRule,
@@ -27,4 +28,6 @@ __all__ = [
     "resolve_device_category",
     "resolve_device_type",
     "suggest_next_tag",
+    "summarize_device",
+    "summarize_project",
 ]

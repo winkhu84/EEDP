@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QHeaderView,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -63,10 +64,20 @@ class SignalEditorWidget(QWidget):
 
         self.table.setObjectName("signalEditorTable")
         self.table.setHorizontalHeaderLabels(list(_HEADERS))
-        self.table.horizontalHeader().setStretchLastSection(True)
+        header = self.table.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setMinimumSectionSize(56)
+        header.setSectionResizeMode(COL_ENABLE, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(COL_NAME, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(COL_IO_TYPE, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(COL_REQUIRED, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(COL_DESCRIPTION, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(COL_ADDRESS, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(COL_REMARK, QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.table.setMinimumWidth(360)
         layout.addWidget(self.table)
 
         buttons = QHBoxLayout()
@@ -91,7 +102,6 @@ class SignalEditorWidget(QWidget):
         for row, signal in enumerate(signals):
             self._set_row(row, signal)
 
-        self.table.resizeColumnsToContents()
         self.table.blockSignals(False)
 
     def selected_row(self) -> int:
@@ -104,9 +114,10 @@ class SignalEditorWidget(QWidget):
     def row_count(self) -> int:
         return self.table.rowCount()
 
-    def read_editable_fields(self, row: int) -> tuple[bool, str, str, str]:
-        """Return (enabled, description, address, remark) for a row."""
+    def read_editable_fields(self, row: int) -> tuple[bool, str, str, str, str]:
+        """Return (enabled, io_type, description, address, remark) for a row."""
         enable_item = self.table.item(row, COL_ENABLE)
+        io_item = self.table.item(row, COL_IO_TYPE)
         description_item = self.table.item(row, COL_DESCRIPTION)
         address_item = self.table.item(row, COL_ADDRESS)
         remark_item = self.table.item(row, COL_REMARK)
@@ -115,10 +126,11 @@ class SignalEditorWidget(QWidget):
             enable_item is not None
             and enable_item.checkState() == Qt.CheckState.Checked
         )
+        io_type = io_item.text().strip() if io_item else ""
         description = description_item.text() if description_item else ""
         address = address_item.text() if address_item else ""
         remark = remark_item.text() if remark_item else ""
-        return enabled, description, address, remark
+        return enabled, io_type, description, address, remark
 
     def _set_row(self, row: int, signal: DeviceSignal) -> None:
         enable_item = QTableWidgetItem()
@@ -133,7 +145,7 @@ class SignalEditorWidget(QWidget):
         enable_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
 
         name_item = self._read_only_item(signal.name)
-        io_item = self._read_only_item(signal.io_type)
+        io_item = QTableWidgetItem(signal.io_type)
         required_item = self._read_only_item("Yes" if signal.required else "No")
 
         description_item = QTableWidgetItem(signal.description)
@@ -159,6 +171,7 @@ class SignalEditorWidget(QWidget):
     def _on_item_changed(self, item: QTableWidgetItem) -> None:
         if item.column() in {
             COL_ENABLE,
+            COL_IO_TYPE,
             COL_DESCRIPTION,
             COL_ADDRESS,
             COL_REMARK,

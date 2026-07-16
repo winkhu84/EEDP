@@ -30,9 +30,10 @@ class RecommendationResult:
 
 @dataclass(frozen=True)
 class IoSummary:
-    """Counted I/O points from enabled recommendations."""
+    """Counted I/O points from enabled signals."""
 
     di: int = 0
     do: int = 0
     ai: int = 0
     ao: int = 0
+    total: int = 0

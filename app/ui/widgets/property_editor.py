@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from typing import Mapping
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QSpinBox,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -16,15 +21,16 @@ from PySide6.QtWidgets import (
 
 from app.common.constants import NO_DEVICE_SELECTED
 from app.model.device import Device
-from app.model.recommendation import IoSummary, Recommendation, RecommendationResult
+from app.model.recommendation import Recommendation, RecommendationResult
 from app.model.signal import Signal as DeviceSignal
 from app.ui.widgets.signal_editor_widget import SignalEditorWidget
 
 
 class PropertyEditorWidget(QWidget):
-    """Displays device properties, recommendations, signals, and I/O summary."""
+    """Displays device properties, recommendations, signals, and I/O summaries."""
 
     recommendation_changed = Signal()
+    quantity_changed = Signal(int)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -38,17 +44,26 @@ class PropertyEditorWidget(QWidget):
         self._category_value = QLabel("-")
         self._type_value = QLabel("-")
         self._description_value = QLabel("-")
-        self._quantity_value = QLabel("-")
+        self.quantity_spin = QSpinBox()
 
         self.recommendation_table = QTableWidget(0, 4)
         self.signal_editor = SignalEditorWidget()
-        self._di_value = QLabel("DI : 0")
-        self._do_value = QLabel("DO : 0")
-        self._ai_value = QLabel("AI : 0")
-        self._ao_value = QLabel("AO : 0")
+
+        self._device_di = QLabel("0")
+        self._device_do = QLabel("0")
+        self._device_ai = QLabel("0")
+        self._device_ao = QLabel("0")
+        self._device_total = QLabel("0")
+
+        self._project_di = QLabel("0")
+        self._project_do = QLabel("0")
+        self._project_ai = QLabel("0")
+        self._project_ao = QLabel("0")
+        self._project_total = QLabel("0")
 
         self._build_ui()
         self.recommendation_table.itemChanged.connect(self._on_item_changed)
+        self.quantity_spin.valueChanged.connect(self.quantity_changed.emit)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -66,7 +81,11 @@ class PropertyEditorWidget(QWidget):
         form.addRow("Category", self._category_value)
         form.addRow("Type", self._type_value)
         form.addRow("Description", self._description_value)
-        form.addRow("Quantity", self._quantity_value)
+
+        self.quantity_spin.setMinimum(1)
+        self.quantity_spin.setMaximum(100)
+        self.quantity_spin.setValue(1)
+        form.addRow("Quantity", self.quantity_spin)
 
         recommendation_box = QGroupBox("Recommended Signals")
         recommendation_layout = QVBoxLayout(recommendation_box)
@@ -74,7 +93,10 @@ class PropertyEditorWidget(QWidget):
         self.recommendation_table.setHorizontalHeaderLabels(
             ["Enable", "Signal Name", "Signal Type", "Category"]
         )
-        self.recommendation_table.horizontalHeader().setStretchLastSection(True)
+        reco_header = self.recommendation_table.horizontalHeader()
+        reco_header.setStretchLastSection(False)
+        reco_header.setMinimumSectionSize(48)
+        reco_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.recommendation_table.verticalHeader().setVisible(False)
         self.recommendation_table.setSelectionBehavior(
             QTableWidget.SelectionBehavior.SelectRows
@@ -82,18 +104,56 @@ class PropertyEditorWidget(QWidget):
         self.recommendation_table.setEditTriggers(
             QTableWidget.EditTrigger.NoEditTriggers
         )
+        self.recommendation_table.setMinimumWidth(280)
         recommendation_layout.addWidget(self.recommendation_table)
 
         signals_box = QGroupBox("Device Signals")
         signals_layout = QVBoxLayout(signals_box)
         signals_layout.addWidget(self.signal_editor)
 
-        io_box = QGroupBox("I/O Summary")
-        io_layout = QVBoxLayout(io_box)
-        io_layout.addWidget(self._di_value)
-        io_layout.addWidget(self._do_value)
-        io_layout.addWidget(self._ai_value)
-        io_layout.addWidget(self._ao_value)
+        signals_row = QWidget()
+        signals_row.setObjectName("signalsRow")
+        signals_row_layout = QHBoxLayout(signals_row)
+        signals_row_layout.setContentsMargins(0, 0, 0, 0)
+        signals_row_layout.setSpacing(10)
+        signals_row_layout.addWidget(recommendation_box, stretch=1)
+        signals_row_layout.addWidget(signals_box, stretch=1)
+
+        device_io_box = self._build_summary_panel(
+            title="Device I/O Summary",
+            accent="#2F6FED",
+            di_label=self._device_di,
+            do_label=self._device_do,
+            ai_label=self._device_ai,
+            ao_label=self._device_ao,
+            total_label=self._device_total,
+        )
+        project_io_box = self._build_summary_panel(
+            title="Project I/O Summary",
+            accent="#2E7D32",
+            di_label=self._project_di,
+            do_label=self._project_do,
+            ai_label=self._project_ai,
+            ao_label=self._project_ao,
+            total_label=self._project_total,
+        )
+
+        summary_row = QWidget()
+        summary_row.setObjectName("ioSummaryRow")
+        summary_layout = QHBoxLayout(summary_row)
+        summary_layout.setContentsMargins(0, 0, 0, 0)
+        summary_layout.setSpacing(8)
+        summary_layout.addWidget(device_io_box, stretch=1)
+        summary_layout.addWidget(project_io_box, stretch=1)
+
+        summary_band = QWidget()
+        summary_band.setObjectName("ioSummaryBand")
+        summary_band_layout = QHBoxLayout(summary_band)
+        summary_band_layout.setContentsMargins(0, 0, 0, 0)
+        summary_band_layout.setSpacing(0)
+        # Occupy ~1/3 of content width; keep left-aligned (stretch 1 + spacer 2).
+        summary_band_layout.addWidget(summary_row, stretch=1)
+        summary_band_layout.addStretch(2)
 
         placeholder_page = QWidget()
         placeholder_layout = QVBoxLayout(placeholder_page)
@@ -102,14 +162,14 @@ class PropertyEditorWidget(QWidget):
         details_page = QWidget()
         details_layout = QVBoxLayout(details_page)
         details_layout.setContentsMargins(0, 0, 0, 0)
+        details_layout.setSpacing(8)
         details_layout.addWidget(details)
-        details_layout.addWidget(recommendation_box, stretch=1)
-        details_layout.addWidget(signals_box, stretch=1)
-        details_layout.addWidget(io_box)
+        details_layout.addWidget(signals_row, stretch=1)
 
         self._stack.addWidget(placeholder_page)
         self._stack.addWidget(details_page)
-        layout.addWidget(self._stack)
+        layout.addWidget(self._stack, stretch=1)
+        layout.addWidget(summary_band)
         self.clear()
 
     def clear(self) -> None:
@@ -118,7 +178,12 @@ class PropertyEditorWidget(QWidget):
         self.recommendation_table.setRowCount(0)
         self.recommendation_table.blockSignals(False)
         self.signal_editor.clear()
-        self.set_io_summary(IoSummary())
+        self.quantity_spin.blockSignals(True)
+        self.quantity_spin.setValue(1)
+        self.quantity_spin.blockSignals(False)
+        self.set_device_io_summary(
+            {"DI": 0, "DO": 0, "AI": 0, "AO": 0, "TOTAL": 0}
+        )
         self._stack.setCurrentIndex(0)
 
     def show_device(
@@ -132,7 +197,10 @@ class PropertyEditorWidget(QWidget):
         self._category_value.setText(device.category)
         self._type_value.setText(device.type)
         self._description_value.setText(device.description or "-")
-        self._quantity_value.setText(str(device.quantity))
+
+        self.quantity_spin.blockSignals(True)
+        self.quantity_spin.setValue(max(1, int(device.quantity)))
+        self.quantity_spin.blockSignals(False)
 
         recommendations = () if result is None else result.recommendations
         self._populate_recommendations(recommendations, device.signals)
@@ -143,25 +211,83 @@ class PropertyEditorWidget(QWidget):
         """Refresh the Device Signals editor from domain objects."""
         self.signal_editor.populate(signals)
 
-    def set_io_summary(self, summary: IoSummary) -> None:
-        """Update the I/O summary labels."""
-        self._di_value.setText(f"DI : {summary.di}")
-        self._do_value.setText(f"DO : {summary.do}")
-        self._ai_value.setText(f"AI : {summary.ai}")
-        self._ao_value.setText(f"AO : {summary.ao}")
+    def set_device_io_summary(self, summary: Mapping[str, int]) -> None:
+        """Update Device I/O Summary labels."""
+        self._device_di.setText(str(summary.get("DI", 0)))
+        self._device_do.setText(str(summary.get("DO", 0)))
+        self._device_ai.setText(str(summary.get("AI", 0)))
+        self._device_ao.setText(str(summary.get("AO", 0)))
+        self._device_total.setText(str(summary.get("TOTAL", 0)))
 
-    def enabled_signal_types(self) -> list[str]:
-        """Return IO types for currently enabled device signals."""
-        types: list[str] = []
-        table = self.signal_editor.table
-        for row in range(table.rowCount()):
-            enable_item = table.item(row, 0)
-            type_item = table.item(row, 2)
-            if enable_item is None or type_item is None:
-                continue
-            if enable_item.checkState() == Qt.CheckState.Checked:
-                types.append(type_item.text())
-        return types
+    def set_project_io_summary(self, summary: Mapping[str, int]) -> None:
+        """Update Project I/O Summary labels."""
+        self._project_di.setText(str(summary.get("DI", 0)))
+        self._project_do.setText(str(summary.get("DO", 0)))
+        self._project_ai.setText(str(summary.get("AI", 0)))
+        self._project_ao.setText(str(summary.get("AO", 0)))
+        self._project_total.setText(str(summary.get("TOTAL", 0)))
+
+    @staticmethod
+    def _build_summary_panel(
+        *,
+        title: str,
+        accent: str,
+        di_label: QLabel,
+        do_label: QLabel,
+        ai_label: QLabel,
+        ao_label: QLabel,
+        total_label: QLabel,
+    ) -> QGroupBox:
+        """Build a compact equal-width I/O summary panel."""
+        box = QGroupBox(title)
+        box.setObjectName("ioSummaryPanel")
+        box.setStyleSheet(
+            f"""
+            QGroupBox#ioSummaryPanel {{
+                font-weight: 600;
+                border: 1px solid {accent};
+                border-radius: 4px;
+                margin-top: 8px;
+                padding-top: 4px;
+            }}
+            QGroupBox#ioSummaryPanel::title {{
+                subcontrol-origin: margin;
+                left: 8px;
+                padding: 0 4px;
+                color: {accent};
+            }}
+            """
+        )
+
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(2)
+
+        rows = (
+            ("DI", di_label),
+            ("DO", do_label),
+            ("AI", ai_label),
+            ("AO", ao_label),
+            ("Total", total_label),
+        )
+        for name, value_label in rows:
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(8)
+            name_label = QLabel(name)
+            name_label.setMinimumWidth(40)
+            value_label.setAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            )
+            if name == "Total":
+                name_label.setStyleSheet("font-weight: 600;")
+                value_label.setStyleSheet("font-weight: 600;")
+            row.addWidget(name_label)
+            row.addStretch(1)
+            row.addWidget(value_label)
+            layout.addLayout(row)
+
+        return box
 
     def recommendation_enable_states(self) -> dict[str, bool]:
         """Return signal name → enabled map from the recommendation table."""
