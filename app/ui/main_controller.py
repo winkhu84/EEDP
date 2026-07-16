@@ -21,15 +21,18 @@ from app.engine.address_manager import (
 from app.engine.device_manager import DeviceDraft, DeviceManager, suggest_next_tag
 from app.engine.fc_io_generator import generate_project_rows
 from app.engine.generate_preview_engine import (
+    build_default_file_name,
     build_generate_items,
     get_default_output_directory,
 )
+from app.export.tia_tag_csv_exporter import TiaTagCsvExportError, export_tia_tags_to_csv
 from app.engine.io_list_parser import IoListParser
 from app.engine.io_summary_engine import summarize_device, summarize_project
 from app.engine.plc_card_calculator import calculate_project_cards
 from app.engine.recommendation_engine import RecommendationEngine
 from app.engine.signal_engine import SignalEngine
 from app.engine.plc_module_mapping_engine import build_project_module_mapping
+from app.engine.tia_tag_generator import generate_sorted_validated_project_tags
 from app.export.fc_io_excel_exporter import (
     build_project_export_info,
     default_export_filename,
@@ -40,6 +43,7 @@ from app.ui.dialogs.address_usage_dialog import AddressUsageDialog
 from app.ui.dialogs.fc_io_preview_dialog import FCIOPreviewDialog
 from app.ui.dialogs.generate_preview_dialog import GeneratePreviewDialog
 from app.ui.dialogs.plc_module_mapping_dialog import PLCModuleMappingDialog
+from app.ui.dialogs.tia_tag_preview_dialog import TIATagPreviewDialog
 from app.ui.main_window import MainWindow
 
 
@@ -71,6 +75,7 @@ class MainController:
         toolbar.open_project_button.clicked.connect(self._on_open_project)
         toolbar.save_project_button.clicked.connect(self._on_save_project)
         toolbar.fc_io_preview_button.clicked.connect(self._on_fc_io_preview)
+        toolbar.tia_tag_preview_button.clicked.connect(self._on_tia_tag_preview)
         toolbar.plc_module_mapping_button.clicked.connect(self._on_plc_module_mapping)
         toolbar.generate_button.clicked.connect(self._on_generate)
 
@@ -527,6 +532,25 @@ class MainController:
         )
         dialog.exec()
 
+    def _on_tia_tag_preview(self) -> None:
+        def refresh():
+            return generate_sorted_validated_project_tags(
+                self._device_manager.devices
+            )
+
+        tags, warnings, errors = refresh()
+        dialog = TIATagPreviewDialog(
+            tags,
+            warnings=warnings,
+            errors=errors,
+            refresh_callback=refresh,
+            parent=self._view,
+        )
+        dialog.export_csv_requested.connect(
+            lambda: self._on_export_tia_tags_csv(dialog)
+        )
+        dialog.exec()
+
     def _on_plc_module_mapping(self) -> None:
         def refresh():
             return build_project_module_mapping(
@@ -682,6 +706,107 @@ class MainController:
         if done.clickedButton() is open_folder_button:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent.resolve())))
 
+    def _export_tia_tags_csv_to_path(
+        self,
+        path: Path,
+        tags,
+        *,
+        parent,
+        warning_count: int,
+        error_count: int,
+        show_success: bool = True,
+    ) -> bool:
+        """Export TIA tags CSV to path. Returns True on success."""
+        try:
+            export_tia_tags_to_csv(tags, path)
+        except TiaTagCsvExportError as exc:
+            QMessageBox.critical(
+                parent,
+                "Export CSV",
+                f"Failed to export CSV file:\n{exc}",
+            )
+            return False
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(
+                parent,
+                "Export CSV",
+                f"Export failed:\n{exc}",
+            )
+            return False
+
+        if show_success:
+            QMessageBox.information(
+                parent,
+                "Export CSV",
+                (
+                    "TIA Portal Tag CSV export completed.\n\n"
+                    f"File: {path}\n"
+                    f"Exported tags: {len(tags)}\n"
+                    f"Warnings: {warning_count}\n"
+                    f"Errors: {error_count}"
+                ),
+            )
+        return True
+
+    def _on_export_tia_tags_csv(self, dialog: TIATagPreviewDialog) -> None:
+        dialog.refresh_data()
+        tags = dialog.all_tags
+        warnings = dialog.warnings
+        errors = dialog.errors
+
+        if errors:
+            box = QMessageBox(dialog)
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.setWindowTitle("Export CSV")
+            box.setText("TIA Tag validation errors exist. Export anyway?")
+            export_anyway = box.addButton(
+                "Export Anyway",
+                QMessageBox.ButtonRole.AcceptRole,
+            )
+            cancel = box.addButton(QMessageBox.StandardButton.Cancel)
+            box.setDefaultButton(cancel)
+            box.exec()
+            if box.clickedButton() is not export_anyway:
+                return
+
+        project_info = self._project_export_info()
+        default_name = build_default_file_name(
+            "tia_portal_tag_table",
+            project_info.project_name,
+            project_info.revision,
+        )
+        file_path, _ = QFileDialog.getSaveFileName(
+            dialog,
+            "Export TIA Portal Tag CSV",
+            default_name,
+            "CSV Files (*.csv)",
+        )
+        if not file_path:
+            return
+
+        path = Path(file_path)
+        if path.suffix.lower() != ".csv":
+            path = path.with_suffix(".csv")
+
+        if path.exists():
+            overwrite = QMessageBox.question(
+                dialog,
+                "Export CSV",
+                f"File already exists:\n{path}\n\nOverwrite?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if overwrite != QMessageBox.StandardButton.Yes:
+                return
+
+        self._export_tia_tags_csv_to_path(
+            path,
+            tags,
+            parent=dialog,
+            warning_count=len(warnings),
+            error_count=len(errors),
+        )
+
     def _on_generate(self) -> None:
         preview = self._build_generate_preview()
         dialog_holder: dict[str, GeneratePreviewDialog | None] = {"dialog": None}
@@ -754,6 +879,37 @@ class MainController:
                     target,
                     parent=dialog,
                     result=preview.fc_io_result,
+                ):
+                    generated.append(item.file_name)
+                else:
+                    failed.append(item.file_name)
+            elif item.item_id == "tia_portal_tag_table":
+                try:
+                    out_path.mkdir(parents=True, exist_ok=True)
+                except OSError as exc:
+                    QMessageBox.critical(
+                        dialog,
+                        "Generate Selected",
+                        f"Failed to create output directory:\n{exc}",
+                    )
+                    return
+                tags = preview.tia_tags
+                if not tags:
+                    tags, tia_warnings, tia_errors = (
+                        generate_sorted_validated_project_tags(
+                            self._device_manager.devices
+                        )
+                    )
+                else:
+                    tia_warnings = preview.tia_warnings
+                    tia_errors = preview.tia_errors
+                if self._export_tia_tags_csv_to_path(
+                    target,
+                    tags,
+                    parent=dialog,
+                    warning_count=len(tia_warnings),
+                    error_count=len(tia_errors),
+                    show_success=False,
                 ):
                     generated.append(item.file_name)
                 else:

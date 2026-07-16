@@ -11,7 +11,9 @@ from app.engine.address_manager import find_address_conflicts
 from app.engine.fc_io_generator import FCIOGenerationResult, generate_project_rows
 from app.engine.io_summary_engine import summarize_project
 from app.engine.plc_module_mapping_engine import build_project_module_mapping
+from app.engine.tia_tag_generator import generate_sorted_validated_project_tags
 from app.model.device import Device
+from app.model.tia_tag import TIATag
 from app.model.generate_item import (
     STATUS_ERROR,
     STATUS_NOT_IMPLEMENTED,
@@ -88,6 +90,9 @@ class GeneratePreviewResult:
     errors: list[ValidationEntry] = field(default_factory=list)
     output_directory: str = ""
     fc_io_result: FCIOGenerationResult | None = None
+    tia_tags: list[TIATag] = field(default_factory=list)
+    tia_warnings: list[str] = field(default_factory=list)
+    tia_errors: list[str] = field(default_factory=list)
 
 
 def sanitize_file_name(text: str) -> str:
@@ -123,7 +128,11 @@ def build_default_file_name(
         "tia_portal_tag_table": (
             f"TIA_Tags_{safe_name}_{safe_revision}.csv"
             if safe_name and safe_revision and safe_name != "Export"
-            else f"TIA_Tags_{safe_name}.csv"
+            else (
+                f"TIA_Tags_{safe_name}.csv"
+                if safe_name and safe_name != "Export"
+                else "TIA_Tags_Export.csv"
+            )
         ),
         "plc_program_source": (
             f"PLC_Program_{safe_name}_{safe_revision}.scl"
@@ -300,6 +309,9 @@ def build_generate_items(
         else default_plc_card_configurations()
     )
     fc_io_result = generate_project_rows(devices)
+    tia_tags, tia_warnings, tia_errors = generate_sorted_validated_project_tags(
+        devices
+    )
     warnings, errors, duplicate_count = _collect_validation(
         devices,
         fc_io_result,
@@ -329,6 +341,8 @@ def build_generate_items(
     out_dir = Path(output_directory) if output_directory else get_default_output_directory()
     fc_io_file = build_default_file_name("fc_io_excel", project_name, revision)
     fc_io_status = _fc_io_status(len(errors), len(warnings))
+    tia_file = build_default_file_name("tia_portal_tag_table", project_name, revision)
+    tia_status = _fc_io_status(len(tia_errors), len(tia_warnings))
 
     items: list[GenerateItem] = [
         GenerateItem(
@@ -384,15 +398,20 @@ def build_generate_items(
             item_id="tia_portal_tag_table",
             category="PLC",
             display_name="TIA Portal Tag Table",
-            file_name=build_default_file_name(
-                "tia_portal_tag_table", project_name, revision
-            ),
+            file_name=tia_file,
             output_format="CSV",
-            enabled=False,
+            enabled=True,
             selected=False,
-            status=STATUS_NOT_IMPLEMENTED,
-            description="TIA Portal tag export (future).",
-            dependencies=["FC_IO Generator"],
+            status=tia_status,
+            warning_count=len(tia_warnings),
+            error_count=len(tia_errors),
+            description=(
+                f"Export {len(tia_tags)} TIA Portal tags "
+                f"(Bool {sum(1 for tag in tia_tags if tag.data_type == 'Bool')}, "
+                f"Int {sum(1 for tag in tia_tags if tag.data_type == 'Int')})."
+            ),
+            output_path=str(out_dir / tia_file),
+            dependencies=["TIA Tag Generator"],
         ),
         GenerateItem(
             item_id="plc_program_source",
@@ -470,6 +489,9 @@ def build_generate_items(
         errors=errors,
         output_directory=str(out_dir),
         fc_io_result=fc_io_result,
+        tia_tags=list(tia_tags),
+        tia_warnings=list(tia_warnings),
+        tia_errors=list(tia_errors),
     )
 
 
@@ -498,6 +520,13 @@ def validate_generate_items(
             output_path=paths.get(item.item_id, item.output_path),
         )
         if updated.item_id == "fc_io_excel" and updated.output_path:
+            updated = replace(
+                updated,
+                output_path=str(
+                    Path(updated.output_path).parent / updated.file_name
+                ),
+            )
+        if updated.item_id == "tia_portal_tag_table" and updated.output_path:
             updated = replace(
                 updated,
                 output_path=str(
