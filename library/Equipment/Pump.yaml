@@ -13,7 +13,6 @@ required_signals:
 optional_signals:
   - name: Reset
     signal_type: DO
-  - name: Local Mode
+  - name: Local/Remote Mode
     signal_type: DI
-  - name: Remote Mode
-    signal_type: DI
+    description: "0 = Local, 1 = Remote"

@@ -45,6 +45,15 @@ class RecommendationEngine:
         self._signal_engine.create_signals_from_rule(device, rule)
         return self._to_result(device, rule)
 
+    def ensure_signals(self, device: Device) -> RecommendationResult:
+        """Apply rules when signals are missing or contain legacy Local/Remote Mode."""
+        if (
+            not device.signals
+            or self._signal_engine.needs_legacy_mode_migration(device)
+        ):
+            return self.recommend(device)
+        return self.recommendation_result(device)
+
     def recommendation_result(self, device: Device) -> RecommendationResult:
         """Build UI recommendation data without recreating Signal objects."""
         rule = self._rule_engine.load_rule(device.type)

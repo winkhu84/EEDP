@@ -6,6 +6,10 @@ from app.engine.rule_engine import DeviceRule, SignalRule, UNKNOWN_DEVICE
 from app.model.device import Device
 from app.model.signal import Signal
 
+# Legacy names replaced by a single merged DI signal.
+LEGACY_MODE_SIGNAL_NAMES = frozenset({"Local Mode", "Remote Mode"})
+MERGED_MODE_SIGNAL_NAME = "Local/Remote Mode"
+
 
 class SignalEngine:
     """Builds Signal domain objects for a Device."""
@@ -65,6 +69,10 @@ class SignalEngine:
 
         return signals
 
+    def needs_legacy_mode_migration(self, device: Device) -> bool:
+        """Return True when device still has obsolete Local/Remote Mode signals."""
+        return any(signal.name in LEGACY_MODE_SIGNAL_NAMES for signal in device.signals)
+
     def _from_rule_item(
         self,
         item: SignalRule,
@@ -77,4 +85,5 @@ class SignalEngine:
             io_type=item.signal_type,
             required=required,
             enabled=enabled,
+            description=item.description,
         )

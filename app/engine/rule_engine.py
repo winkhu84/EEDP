@@ -14,6 +14,7 @@ class SignalRule:
 
     name: str
     signal_type: str
+    description: str = ""
 
 
 @dataclass(frozen=True)
@@ -125,8 +126,17 @@ class RuleEngine:
             if not isinstance(item, dict):
                 continue
             signal_name = str(item.get("name", "")).strip()
-            signal_type = str(item.get("signal_type", "")).strip()
+            signal_type = str(
+                item.get("signal_type", item.get("io_type", ""))
+            ).strip()
+            description = str(item.get("description", "")).strip()
             if not signal_name or not signal_type:
                 continue
-            signals.append(SignalRule(name=signal_name, signal_type=signal_type))
+            signals.append(
+                SignalRule(
+                    name=signal_name,
+                    signal_type=signal_type,
+                    description=description,
+                )
+            )
         return tuple(signals)

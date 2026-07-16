@@ -7,8 +7,6 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -20,6 +18,7 @@ from app.common.constants import NO_DEVICE_SELECTED
 from app.model.device import Device
 from app.model.recommendation import IoSummary, Recommendation, RecommendationResult
 from app.model.signal import Signal as DeviceSignal
+from app.ui.widgets.signal_editor_widget import SignalEditorWidget
 
 
 class PropertyEditorWidget(QWidget):
@@ -42,7 +41,7 @@ class PropertyEditorWidget(QWidget):
         self._quantity_value = QLabel("-")
 
         self.recommendation_table = QTableWidget(0, 4)
-        self.device_signals_list = QListWidget()
+        self.signal_editor = SignalEditorWidget()
         self._di_value = QLabel("DI : 0")
         self._do_value = QLabel("DO : 0")
         self._ai_value = QLabel("AI : 0")
@@ -87,8 +86,7 @@ class PropertyEditorWidget(QWidget):
 
         signals_box = QGroupBox("Device Signals")
         signals_layout = QVBoxLayout(signals_box)
-        self.device_signals_list.setObjectName("deviceSignalsList")
-        signals_layout.addWidget(self.device_signals_list)
+        signals_layout.addWidget(self.signal_editor)
 
         io_box = QGroupBox("I/O Summary")
         io_layout = QVBoxLayout(io_box)
@@ -119,7 +117,7 @@ class PropertyEditorWidget(QWidget):
         self.recommendation_table.blockSignals(True)
         self.recommendation_table.setRowCount(0)
         self.recommendation_table.blockSignals(False)
-        self.device_signals_list.clear()
+        self.signal_editor.clear()
         self.set_io_summary(IoSummary())
         self._stack.setCurrentIndex(0)
 
@@ -128,7 +126,7 @@ class PropertyEditorWidget(QWidget):
         device: Device,
         result: RecommendationResult | None = None,
     ) -> None:
-        """Populate properties, recommendations, and device signal list."""
+        """Populate properties, recommendations, and signal editor."""
         self._tag_value.setText(device.tag)
         self._area_value.setText(device.area)
         self._category_value.setText(device.category)
@@ -142,13 +140,8 @@ class PropertyEditorWidget(QWidget):
         self._stack.setCurrentIndex(1)
 
     def show_device_signals(self, signals: list[DeviceSignal]) -> None:
-        """Refresh the Device Signals list from domain objects."""
-        self.device_signals_list.clear()
-        for signal in signals:
-            state = "ON" if signal.enabled else "OFF"
-            category = "Required" if signal.required else "Optional"
-            text = f"{signal.name}  |  {signal.io_type}  |  {category}  |  {state}"
-            self.device_signals_list.addItem(QListWidgetItem(text))
+        """Refresh the Device Signals editor from domain objects."""
+        self.signal_editor.populate(signals)
 
     def set_io_summary(self, summary: IoSummary) -> None:
         """Update the I/O summary labels."""
@@ -158,11 +151,12 @@ class PropertyEditorWidget(QWidget):
         self._ao_value.setText(f"AO : {summary.ao}")
 
     def enabled_signal_types(self) -> list[str]:
-        """Return signal types for currently enabled recommendation rows."""
+        """Return IO types for currently enabled device signals."""
         types: list[str] = []
-        for row in range(self.recommendation_table.rowCount()):
-            enable_item = self.recommendation_table.item(row, 0)
-            type_item = self.recommendation_table.item(row, 2)
+        table = self.signal_editor.table
+        for row in range(table.rowCount()):
+            enable_item = table.item(row, 0)
+            type_item = table.item(row, 2)
             if enable_item is None or type_item is None:
                 continue
             if enable_item.checkState() == Qt.CheckState.Checked:
@@ -181,6 +175,23 @@ class PropertyEditorWidget(QWidget):
                 enable_item.checkState() == Qt.CheckState.Checked
             )
         return states
+
+    def sync_recommendation_enables(self, signals: list[DeviceSignal]) -> None:
+        """Update recommendation Enable checkboxes from device.signals."""
+        enabled_by_name = {signal.name: signal.enabled for signal in signals}
+        self.recommendation_table.blockSignals(True)
+        for row in range(self.recommendation_table.rowCount()):
+            name_item = self.recommendation_table.item(row, 1)
+            enable_item = self.recommendation_table.item(row, 0)
+            if name_item is None or enable_item is None:
+                continue
+            if name_item.text() in enabled_by_name:
+                enable_item.setCheckState(
+                    Qt.CheckState.Checked
+                    if enabled_by_name[name_item.text()]
+                    else Qt.CheckState.Unchecked
+                )
+        self.recommendation_table.blockSignals(False)
 
     def _populate_recommendations(
         self,
