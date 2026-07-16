@@ -223,7 +223,7 @@ def group_digital_addresses_by_card(
     return blocks
 
 
-def _group_analog_addresses_by_card(
+def group_analog_addresses_by_card(
     addresses: Sequence[str],
     prefix: str,
     channels_per_card: int,
@@ -233,8 +233,6 @@ def _group_analog_addresses_by_card(
         raise ValueError("channels_per_card must be greater than zero.")
 
     prefix = prefix.upper()
-    # Card blocks are aligned to absolute word 0 with 2-byte channel steps.
-    # Channel index = word // 2; card = channel_index // channels_per_card.
     card_indices: set[int] = set()
     for address in addresses:
         try:
@@ -243,11 +241,7 @@ def _group_analog_addresses_by_card(
             continue
         if parsed.prefix != prefix:
             continue
-        if parsed.word % 2 != 0:
-            # Still place odd words into the nearest lower even channel slot.
-            channel_index = parsed.word // 2
-        else:
-            channel_index = parsed.word // 2
+        channel_index = parsed.word // 2
         card_indices.add(channel_index // channels_per_card)
 
     blocks: list[tuple[int, str, str]] = []
@@ -258,6 +252,15 @@ def _group_analog_addresses_by_card(
         end = f"{prefix}{end_channel * 2}"
         blocks.append((card_zero + 1, start, end))
     return blocks
+
+
+def _group_analog_addresses_by_card(
+    addresses: Sequence[str],
+    prefix: str,
+    channels_per_card: int,
+) -> list[tuple[int, str, str]]:
+    """Backward-compatible alias for group_analog_addresses_by_card."""
+    return group_analog_addresses_by_card(addresses, prefix, channels_per_card)
 
 
 def _build_digital_card(

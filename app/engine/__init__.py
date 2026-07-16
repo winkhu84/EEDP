@@ -48,6 +48,15 @@ from app.engine.plc_card_calculator import (
     calculate_card_requirement,
     calculate_project_cards,
 )
+from app.engine.plc_module_mapping_engine import (
+    build_analog_card_mapping,
+    build_digital_card_mapping,
+    build_project_module_mapping,
+    collect_signal_assignments,
+    get_analog_card_index,
+    get_digital_card_index,
+    validate_mapping,
+)
 from app.engine.recommendation_engine import RecommendationEngine, build_io_summary
 from app.engine.rule_engine import (
     DeviceRule,
@@ -81,19 +90,25 @@ __all__ = [
     "apply_start_addresses",
     "assign_device_addresses",
     "assign_project_addresses",
+    "build_analog_card_mapping",
     "build_all_card_usage",
     "build_card_usage",
+    "build_digital_card_mapping",
     "build_io_summary",
+    "build_project_module_mapping",
     "calculate_card_requirement",
     "calculate_project_cards",
     "clear_device_addresses",
     "collect_project_addresses",
+    "collect_signal_assignments",
     "expand_sequential_tags",
     "find_address_assignments",
     "find_address_conflicts",
     "format_conflict_message",
     "generate_device_rows",
     "generate_project_rows",
+    "get_analog_card_index",
+    "get_digital_card_index",
     "group_digital_addresses_by_card",
     "increment_analog_address",
     "increment_digital_address",
@@ -108,4 +123,5 @@ __all__ = [
     "summarize_project",
     "validate_device_start_addresses",
     "validate_fc_io_rows",
+    "validate_mapping",
 ]

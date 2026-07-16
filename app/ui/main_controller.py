@@ -25,6 +25,7 @@ from app.engine.io_summary_engine import summarize_device, summarize_project
 from app.engine.plc_card_calculator import calculate_project_cards
 from app.engine.recommendation_engine import RecommendationEngine
 from app.engine.signal_engine import SignalEngine
+from app.engine.plc_module_mapping_engine import build_project_module_mapping
 from app.export.fc_io_excel_exporter import (
     build_project_export_info,
     default_export_filename,
@@ -33,6 +34,7 @@ from app.export.fc_io_excel_exporter import (
 from app.model.plc_card_config import PlcCardConfig, default_plc_card_configurations
 from app.ui.dialogs.address_usage_dialog import AddressUsageDialog
 from app.ui.dialogs.fc_io_preview_dialog import FCIOPreviewDialog
+from app.ui.dialogs.plc_module_mapping_dialog import PLCModuleMappingDialog
 from app.ui.main_window import MainWindow
 
 
@@ -55,6 +57,7 @@ class MainController:
         self._plc_card_configs: tuple[PlcCardConfig, ...] = (
             default_plc_card_configurations()
         )
+        self._plc_rack_slot: dict[tuple[str, int], tuple[str, str]] = {}
 
     def bind(self) -> None:
         """Connect view signals to controller handlers."""
@@ -63,6 +66,7 @@ class MainController:
         toolbar.open_project_button.clicked.connect(self._on_open_project)
         toolbar.save_project_button.clicked.connect(self._on_save_project)
         toolbar.fc_io_preview_button.clicked.connect(self._on_fc_io_preview)
+        toolbar.plc_module_mapping_button.clicked.connect(self._on_plc_module_mapping)
         toolbar.generate_button.clicked.connect(self._on_generate)
 
         toolbar.add_device_button.clicked.connect(self._on_add_device)
@@ -515,6 +519,30 @@ class MainController:
         )
         dialog.export_excel_requested.connect(
             lambda: self._on_export_fc_io_excel(dialog)
+        )
+        dialog.exec()
+
+    def _on_plc_module_mapping(self) -> None:
+        def refresh():
+            return build_project_module_mapping(
+                self._device_manager.devices,
+                self._plc_card_configs,
+                rack_slot=self._plc_rack_slot,
+            )
+
+        def on_rack_slot_changed(
+            io_type: str,
+            card_number: int,
+            rack: str,
+            slot: str,
+        ) -> None:
+            self._plc_rack_slot[(io_type, card_number)] = (rack, slot)
+
+        dialog = PLCModuleMappingDialog(
+            refresh(),
+            refresh_callback=refresh,
+            rack_slot_changed=on_rack_slot_changed,
+            parent=self._view,
         )
         dialog.exec()
 

@@ -26,6 +26,7 @@ class ProjectToolbar(QWidget):
         self.open_project_button = QPushButton("Open Project")
         self.save_project_button = QPushButton("Save Project")
         self.fc_io_preview_button = QPushButton("FC_IO Preview")
+        self.plc_module_mapping_button = QPushButton("PLC Module Mapping")
         self.generate_button = QPushButton("Generate")
 
         self.add_device_button = QPushButton("Add Device")
@@ -69,6 +70,7 @@ class ProjectToolbar(QWidget):
         layout.addWidget(self.open_project_button)
         layout.addWidget(self.save_project_button)
         layout.addWidget(self.fc_io_preview_button)
+        layout.addWidget(self.plc_module_mapping_button)
         layout.addWidget(self.generate_button)
 
     def set_device_actions_enabled(self, enabled: bool) -> None:
