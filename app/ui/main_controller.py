@@ -21,6 +21,7 @@ from app.engine.plc_card_calculator import calculate_project_cards
 from app.engine.recommendation_engine import RecommendationEngine
 from app.engine.signal_engine import SignalEngine
 from app.model.plc_card_config import PlcCardConfig, default_plc_card_configurations
+from app.ui.dialogs.address_usage_dialog import AddressUsageDialog
 from app.ui.main_window import MainWindow
 
 
@@ -69,6 +70,9 @@ class MainController:
         )
         self._view.property_editor.clear_addresses_requested.connect(
             self._on_clear_addresses
+        )
+        self._view.property_editor.address_usage_requested.connect(
+            self._on_address_usage
         )
 
         signal_editor = self._view.property_editor.signal_editor
@@ -293,6 +297,16 @@ class MainController:
         self._view.property_editor.show_device_signals(device.signals)
         self._refresh_address_conflict_status(show_dialog=False)
         self._refresh_io_summaries()
+
+    def _on_address_usage(self) -> None:
+        selected = self._selected_device()
+        dialog = AddressUsageDialog(
+            self._device_manager.devices,
+            card_configurations=self._plc_card_configs,
+            selected_device_id=None if selected is None else selected.id,
+            parent=self._view,
+        )
+        dialog.exec()
 
     def _refresh_address_conflict_status(self, *, show_dialog: bool) -> None:
         conflicts = find_address_conflicts(self._device_manager.devices)

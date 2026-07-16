@@ -8,7 +8,7 @@ signals:
   - name: Start Command
     signal_type: DO
     required: true
-  - name: Reset
+  - name: Stop Command
     signal_type: DO
     required: false
   - name: Local/Remote Mode

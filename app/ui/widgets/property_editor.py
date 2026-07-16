@@ -35,6 +35,7 @@ class PropertyEditorWidget(QWidget):
     recommendation_changed = Signal()
     assign_addresses_requested = Signal()
     clear_addresses_requested = Signal()
+    address_usage_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -59,6 +60,7 @@ class PropertyEditorWidget(QWidget):
         self.use_ao_start_check = QCheckBox("Use AO Start")
         self.assign_addresses_button = QPushButton("Assign Addresses")
         self.clear_addresses_button = QPushButton("Clear Addresses")
+        self.address_usage_button = QPushButton("Address Usage")
         self.conflict_status_label = QLabel("")
 
         self.recommendation_table = QTableWidget(0, 4)
@@ -85,6 +87,9 @@ class PropertyEditorWidget(QWidget):
         )
         self.clear_addresses_button.clicked.connect(
             self.clear_addresses_requested.emit
+        )
+        self.address_usage_button.clicked.connect(
+            self.address_usage_requested.emit
         )
         self.use_di_start_check.toggled.connect(self._sync_start_edit_enabled)
         self.use_do_start_check.toggled.connect(self._sync_start_edit_enabled)
@@ -141,6 +146,7 @@ class PropertyEditorWidget(QWidget):
         address_buttons.setSpacing(6)
         address_buttons.addWidget(self.assign_addresses_button)
         address_buttons.addWidget(self.clear_addresses_button)
+        address_buttons.addWidget(self.address_usage_button)
         address_buttons.addStretch(1)
         plc_form.addRow(address_buttons)
 
@@ -185,8 +191,8 @@ class PropertyEditorWidget(QWidget):
         signals_row_layout = QHBoxLayout(signals_row)
         signals_row_layout.setContentsMargins(0, 0, 0, 0)
         signals_row_layout.setSpacing(10)
-        signals_row_layout.addWidget(recommendation_box, stretch=1)
-        signals_row_layout.addWidget(signals_box, stretch=1)
+        signals_row_layout.addWidget(recommendation_box, stretch=4)
+        signals_row_layout.addWidget(signals_box, stretch=6)
 
         device_io_box = self._build_summary_panel(
             title="Device I/O Summary",
