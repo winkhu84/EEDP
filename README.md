@@ -123,7 +123,8 @@ Each run writes files into a timestamped folder under the selected output direct
 
 ## Generated Files
 
-Each generation run creates a unique timestamped folder so previous results are not overwritten.
+Each generation run creates a unique timestamped folder so previous
+results are not overwritten.
 
 ```text
 output/
@@ -136,10 +137,10 @@ output/
 
 | File | Description |
 |------|-------------|
-| `FC_IO.xlsx` | Project FC_IO workbook for engineering review and export |
-| `TIA_Tags.csv` | Siemens-compatible TIA Portal tag table (CSV) |
-| `TIA_V20_Tags.xlsx` | Siemens TIA Portal V20 PLC tag workbook (template-based) |
-| `Generation_Report.txt` | Summary of generated artifacts, statuses, and counts |
+| **FC_IO.xlsx** | Project PLC I/O workbook for engineering review and export |
+| **TIA_Tags.csv** | Siemens-compatible PLC tag table in CSV format |
+| **TIA_V20_Tags.xlsx** | Siemens TIA Portal V20 import workbook |
+| **Generation_Report.txt** | Summary of generated artifacts, statuses, and counts |
 
 ## Current Status
 
@@ -147,21 +148,21 @@ output/
 
 ### Completed
 
-- Generate Framework
-- FC_IO Generator
-- Siemens TIA CSV Generator
-- Siemens TIA Portal V20 XLSX Generator
-- Generation Report
-- Repository Cleanup
-- GitHub Release
+- [x] Generate Framework
+- [x] FC_IO Generator
+- [x] Siemens TIA CSV Generator
+- [x] Siemens TIA Portal V20 XLSX Generator
+- [x] Generation Report
+- [x] Repository Cleanup
+- [x] GitHub Release
 
 ### In Progress
 
-- Device Manager
-- Generate UI
+- [ ] Device Manager
+- [ ] Generate UI
 
 ### Planned
 
-- PLC Source Generator
-- DB Generator
-- EPLAN Generator
+- [ ] PLC Source Generator
+- [ ] DB Generator
+- [ ] EPLAN Generator
