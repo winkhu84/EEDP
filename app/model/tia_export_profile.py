@@ -55,10 +55,10 @@ TIA_V20_EXPORT_PROFILE = TIAExportProfile(
     default_hmi_visible=True,
     default_hmi_accessible=True,
     default_hmi_writeable=True,
-    default_typeobject_id="14",
-    default_version_id="14",
-    default_belongs_to_unit="14",
-    default_accessibility="14",
+    default_typeobject_id="",
+    default_version_id="",
+    default_belongs_to_unit="",
+    default_accessibility="",
 )
 
 
@@ -88,13 +88,7 @@ def validate_export_profile(profile: TIAExportProfile) -> list[str]:
     if not profile.default_path.strip():
         errors.append("Default Path must not be blank.")
 
-    for field_name, value in (
-        ("default_typeobject_id", profile.default_typeobject_id),
-        ("default_version_id", profile.default_version_id),
-        ("default_belongs_to_unit", profile.default_belongs_to_unit),
-        ("default_accessibility", profile.default_accessibility),
-    ):
-        if not str(value).strip():
-            errors.append(f"Required default value is missing: {field_name}")
+    # Reserved Siemens fields (Typeobject ID, Version ID, BelongsToUnit,
+    # Accessibility) are allowed to be empty strings.
 
     return errors
