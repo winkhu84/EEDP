@@ -1,6 +1,36 @@
 # EEDP
 
-Electrical Engineering Development Platform for PLC engineering automation.
+Electrical Engineering Development Platform
+
+Engineering automation platform for PLC, ECAD and project generation.
+
+![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge)
+![Platform](https://img.shields.io/badge/Platform-Windows-green?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-v0.3-blueviolet?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-In_Development-orange?style=for-the-badge)
+![License](https://img.shields.io/badge/License-Private-red?style=for-the-badge)
+
+## Overview
+
+EEDP is an engineering automation platform that generates PLC engineering deliverables from project data.
+
+Current capabilities include:
+
+- FC_IO workbook generation
+- Siemens TIA Tag CSV generation
+- Siemens TIA Portal V20 XLSX generation
+- Generation Report
+- Output Management
+- Repository Cleanup
+
+## Quick Links
+
+- [Installation](#installation)
+- [Architecture](#architecture)
+- [Usage](#usage)
+- [Generated Files](#generated-files)
+- [Current Status](#current-status)
+- [Roadmap](#roadmap)
 
 ## Features
 
