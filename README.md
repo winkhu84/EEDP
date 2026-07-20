@@ -63,3 +63,60 @@ pip install -r requirements.txt
 **Current Release:** v0.3
 
 Generate Framework completed.
+
+## Architecture
+
+EEDP builds engineering deliverables through a layered flow: project devices are managed in memory, then `GenerateManager` creates a shared `GenerationContext` and runs exporters that each produce one artifact into a timestamped output folder.
+
+```mermaid
+flowchart LR
+
+    DeviceManager --> GenerateManager
+    GenerateManager --> GenerationContext
+    GenerationContext --> GenerationExporter
+
+    GenerationExporter --> FC_IO
+    GenerationExporter --> TIA_CSV
+    GenerationExporter --> TIA_XLSX
+    GenerationExporter --> GenerationReport
+
+    FC_IO --> Output
+    TIA_CSV --> Output
+    TIA_XLSX --> Output
+    GenerationReport --> Output
+```
+
+## Usage
+
+### Start the application
+
+```bash
+python main.py
+```
+
+### Generate deliverables (framework)
+
+```python
+from app.engine.generate_manager import GenerateManager, GenerationOptions
+from app.model.device import Device
+
+devices: list[Device] = []  # project devices
+options = GenerationOptions(
+    generate_fc_io=True,
+    generate_tia_csv=True,
+    generate_tia_xlsx=True,
+    create_run_subdirectory=True,
+)
+
+result = GenerateManager().generate(
+    output_directory="output/generated",
+    options=options,
+    devices=devices,
+)
+
+print(result.output_directory)
+for artifact in result.artifacts:
+    print(artifact.artifact_type, artifact.status.value, artifact.output_path)
+```
+
+Each run writes files into a timestamped folder under the selected output directory and creates `Generation_Report.txt`.
