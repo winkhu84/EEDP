@@ -1,4 +1,4 @@
-"""Standalone test for GenerateManager FC_IO exporter integration."""
+"""Standalone test for GenerateManager FC_IO, TIA CSV, and TIA XLSX integration."""
 
 from __future__ import annotations
 
@@ -48,6 +48,7 @@ def main() -> None:
         generate_fc_io=True,
         generate_tia_csv=True,
         generate_tia_xlsx=True,
+        create_run_subdirectory=True,
     )
     output_directory = "output/generate_manager_test"
 
@@ -56,6 +57,9 @@ def main() -> None:
         options=options,
         devices=devices,
     )
+
+    print(f"Resolved output directory: {result.output_directory}")
+    print()
 
     for artifact in result.artifacts:
         print(
@@ -72,12 +76,36 @@ def main() -> None:
 
     by_type = {artifact.artifact_type: artifact for artifact in result.artifacts}
     assert by_type["FC_IO"].status is GenerationStatus.SUCCESS
-    assert by_type["TIA_CSV"].status is GenerationStatus.SKIPPED
-    assert by_type["TIA_XLSX"].status is GenerationStatus.SKIPPED
+    assert by_type["TIA_CSV"].status is GenerationStatus.SUCCESS
+    assert by_type["TIA_XLSX"].status is GenerationStatus.SUCCESS
+    assert by_type["GENERATION_REPORT"].status is GenerationStatus.SUCCESS
 
-    fc_io_path = Path(output_directory) / "FC_IO.xlsx"
-    if not fc_io_path.is_file():
-        raise AssertionError(f"Expected file does not exist: {fc_io_path}")
+    assert result.success_count == 4
+    assert result.error_count == 0
+    assert result.skipped_count == 0
+    assert result.is_successful is True
+
+    run_directory = Path(result.output_directory)
+    expected_files = (
+        run_directory / "FC_IO.xlsx",
+        run_directory / "TIA_Tags.csv",
+        run_directory / "TIA_V20_Tags.xlsx",
+        run_directory / "Generation_Report.txt",
+    )
+    for path in expected_files:
+        if not path.is_file():
+            raise AssertionError(f"Expected file does not exist: {path}")
+
+    report_text = (run_directory / "Generation_Report.txt").read_text(encoding="utf-8")
+    for expected in (
+        "EEDP Generation Report",
+        "FC_IO | SUCCESS",
+        "TIA_CSV | SUCCESS",
+        "TIA_XLSX | SUCCESS",
+        "Overall Successful: True",
+    ):
+        if expected not in report_text:
+            raise AssertionError(f"Report is missing expected text: {expected}")
 
 
 if __name__ == "__main__":
