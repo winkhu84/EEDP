@@ -144,25 +144,24 @@ output/
 
 ## Current Status
 
-**Current Release:** v0.3
+Current Release: **v0.3**
 
-### Completed
+| 🟢 Completed | 🔵 In Progress | 🟣 Planned |
+|--------------|---------------|-----------|
+| Generate Framework | Device Manager | PLC Source Generator |
+| FC_IO Generator | Generate UI | DB Generator |
+| Siemens TIA CSV Generator |  | EPLAN Generator |
+| Siemens TIA Portal V20 XLSX Generator |  | |
+| Generation Report |  | |
+| Repository Cleanup |  | |
+| GitHub Release |  | |
 
-- [x] Generate Framework
-- [x] FC_IO Generator
-- [x] Siemens TIA CSV Generator
-- [x] Siemens TIA Portal V20 XLSX Generator
-- [x] Generation Report
-- [x] Repository Cleanup
-- [x] GitHub Release
+## Roadmap
 
-### In Progress
-
-- [ ] Device Manager
-- [ ] Generate UI
-
-### Planned
-
-- [ ] PLC Source Generator
-- [ ] DB Generator
-- [ ] EPLAN Generator
+| Phase | Focus | Target |
+|------|----------------------------|----------------|
+| Phase 1 | Generate Framework | ✅ Complete |
+| Phase 2 | Device Manager + UI | 🚧 In Progress |
+| Phase 3 | PLC Source Generator | 📅 Planned |
+| Phase 4 | DB Generator | 📅 Planned |
+| Phase 5 | EPLAN Generator | 📅 Planned |
