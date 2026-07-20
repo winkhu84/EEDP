@@ -35,6 +35,16 @@ output/*
 !output/test/.gitkeep
 !output/temp/.gitkeep
 
+# Ignore nested generated files; keep each .gitkeep trackable
+output/generated/*
+!output/generated/.gitkeep
+
+output/test/*
+!output/test/.gitkeep
+
+output/temp/*
+!output/temp/.gitkeep
+
 # Temporary and test artifacts (repository root)
 .tmp*/
 .tmp_*
