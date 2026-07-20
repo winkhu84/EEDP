@@ -1,9 +1,0 @@
-﻿python.exe : D:\EEDP\.venv\Scripts\python.exe: can't open file 'D:\\EEDP\\_fc_io_test_run.py': [Errno 2] No such file o
-r directory
-위치 C:\Users\plasm\AppData\Local\Temp\ps-script-770219cc-52a1-4c24-8c92-b208766a6934.ps1:222 문자:72
-+ ...  utf8NoBOM; & D:\EEDP\.venv\Scripts\python.exe D:\EEDP\_fc_io_test_ru ...
-+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (D:\EEDP\.venv\S...le or directory:String) [], RemoteException
-    + FullyQualifiedErrorId : NativeCommandError
- 
-EXIT_CODE=2

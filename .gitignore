@@ -1,11 +1,51 @@
-.venv/
+# Python caches and coverage
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
 .pytest_cache/
 .mypy_cache/
-output/
-*.tmp
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE and OS files
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Office lock / temp files
 ~$*
+
+# Generated EEDP output (keep folder structure via .gitkeep)
+output/*
+!output/.gitkeep
+!output/generated/
+!output/test/
+!output/temp/
+!output/generated/.gitkeep
+!output/test/.gitkeep
+!output/temp/.gitkeep
+
+# Temporary and test artifacts (repository root)
+.tmp*/
 .tmp_*
+*.tmp
+*.temp
+*_test_out.txt
+*_stdout.txt
+*_stderr.txt
+
+# Generated engineering files (repository root)
+TIA_V20_Output*.xlsx
+TIA_Tags*.csv
+FC_IO*.xlsx
+Generation_Report*.txt
