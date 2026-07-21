@@ -110,21 +110,37 @@ This structure improves maintainability, scalability and future feature developm
 
 ### Main Window
 
-![Main Window](docs/images/main_window.png)
+<p align="center">
+  <img src="docs/images/main_window.png" width="900">
+</p>
 
+<p align="center">
 Project management and device engineering workspace.
+</p>
+
+---
 
 ### Generate Preview
 
-![Generate Preview](docs/images/generate_preview.png)
+<p align="center">
+  <img src="docs/images/generate_preview.png" width="900">
+</p>
 
+<p align="center">
 Validation summary, deliverables and generation workflow.
+</p>
+
+---
 
 ### PLC Module Mapping
 
-![PLC Module Mapping](docs/images/plc_module_mapping.png)
+<p align="center">
+  <img src="docs/images/plc_module_mapping.png" width="900">
+</p>
 
+<p align="center">
 Automatic Siemens PLC module mapping and address visualization.
+</p>
 
 > Screenshots will be updated as new features are introduced.
 
