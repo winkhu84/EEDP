@@ -1,27 +1,30 @@
-# EEDP
+# EEDP Studio
 
 Electrical Engineering Development Platform
 
-Engineering automation platform for PLC, ECAD and project generation.
+PLC Engineering Automation Platform for Siemens TIA Portal and EPLAN
 
-![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge)
+![Python](https://img.shields.io/badge/Python-3.14-blue?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Windows-green?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-v0.3-blueviolet?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-In_Development-orange?style=for-the-badge)
+![PySide6](https://img.shields.io/badge/UI-PySide6-41CD52?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-v0.4.0-blueviolet?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Active_Development-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-Private-red?style=for-the-badge)
 
 ## Overview
 
-EEDP is an engineering automation platform that generates PLC engineering deliverables from project data.
+EEDP Studio is a PLC engineering automation platform that turns project device and signal data into Siemens-ready deliverables and validation reports.
 
-Current capabilities include:
+It automates:
 
-- FC_IO workbook generation
+- Device and signal management
+- PLC address assignment
+- FC_IO generation
 - Siemens TIA Tag CSV generation
 - Siemens TIA Portal V20 XLSX generation
-- Generation Report
-- Output Management
-- Repository Cleanup
+- PLC module mapping
+- Generate Preview
+- Validation and engineering reports
 
 ## Quick Links
 
