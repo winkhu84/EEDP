@@ -26,10 +26,115 @@ It automates:
 - Generate Preview
 - Validation and engineering reports
 
+## Key Features
+
+### Engineering
+
+| Feature | Status |
+|---------|:------:|
+| Device Manager | ✅ |
+| Recommended Signals | ✅ |
+| PLC Address Assignment | ✅ |
+| Validation Summary | ✅ |
+| Validation Details | ✅ |
+
+### Siemens Integration
+
+| Feature | Status |
+|---------|:------:|
+| FC_IO Export | ✅ |
+| Siemens TIA Tag CSV | ✅ |
+| Siemens TIA Portal V20 XLSX | ✅ |
+| PLC Module Mapping | ✅ |
+
+### Productivity
+
+| Feature | Status |
+|---------|:------:|
+| Generate Preview | ✅ |
+| Timestamped Output Folder | ✅ |
+| Generation Report | 🚧 |
+| Engineering Reports | 🚧 |
+
+EEDP Studio reduces repetitive PLC engineering work by automatically
+generating standardized engineering deliverables for Siemens-based projects.
+
+## Architecture
+
+```text
+EEDP Studio
+│
+├── User Interface
+│   ├── Main Window
+│   ├── Device Manager
+│   ├── Generate Preview
+│   └── PLC Module Mapping
+│
+├── Engineering Core
+│   ├── Validation Engine
+│   ├── Address Assignment
+│   ├── Recommended Signals
+│   └── Project Management
+│
+├── Export Engine
+│   ├── FC_IO
+│   ├── Siemens TIA CSV
+│   ├── Siemens TIA Portal XLSX
+│   ├── Reports
+│   └── Output Management
+│
+└── Project Data
+    ├── Devices
+    ├── Signals
+    ├── PLC Addresses
+    └── Settings
+```
+
+## Project Structure
+
+| Folder | Purpose |
+|---------|---------|
+| app/ | Application source code |
+| app/ui/ | User interface |
+| app/core/ | Engineering logic |
+| app/export/ | Export generators |
+| app/models/ | Data models |
+| docs/ | Documentation |
+| output/ | Generated engineering files |
+
+The project follows a layered architecture that separates the user interface,
+engineering logic, export modules and project data.
+This structure improves maintainability, scalability and future feature development.
+
+## Screenshots
+
+### Main Window
+
+![Main Window](docs/images/main_window.png)
+
+Project management and device engineering workspace.
+
+### Generate Preview
+
+![Generate Preview](docs/images/generate_preview.png)
+
+Validation summary, deliverables and generation workflow.
+
+### PLC Module Mapping
+
+![PLC Module Mapping](docs/images/plc_module_mapping.png)
+
+Automatic Siemens PLC module mapping and address visualization.
+
+> Screenshots will be updated as new features are introduced.
+
 ## Quick Links
 
 - [Installation](#installation)
 - [Architecture](#architecture)
+- [Project Structure](#project-structure)
+- [Screenshots](#screenshots)
+- [Generation Flow](#generation-flow)
 - [Usage](#usage)
 - [Generated Files](#generated-files)
 - [Current Status](#current-status)
@@ -43,18 +148,6 @@ It automates:
 - Generate Framework
 - Generation Report
 - Output Management
-
-## Project Structure
-
-```text
-app/
-docs/
-library/
-output/
-resources/
-scripts/
-tests/
-```
 
 ## Requirements
 
@@ -97,7 +190,7 @@ pip install -r requirements.txt
 
 Generate Framework completed.
 
-## Architecture
+## Generation Flow
 
 EEDP builds engineering deliverables through a layered flow: project devices are managed in memory, then `GenerateManager` creates a shared `GenerationContext` and runs exporters that each produce one artifact into a timestamped output folder.
 
