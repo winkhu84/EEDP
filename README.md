@@ -108,39 +108,51 @@ This structure improves maintainability, scalability and future feature developm
 
 ## Screenshots
 
-### Main Window
+<table align="center">
+<tr>
+<td align="center">
 
-<p align="center">
-  <img src="docs/images/main_window.png" width="900">
-</p>
+<b>Main Window</b><br><br>
 
-<p align="center">
+<a href="docs/images/main_window.png">
+<img src="docs/images/main_window.png" width="300">
+</a>
+
+<br><br>
+
 Project management and device engineering workspace.
-</p>
 
----
+</td>
 
-### Generate Preview
+<td align="center">
 
-<p align="center">
-  <img src="docs/images/generate_preview.png" width="900">
-</p>
+<b>Generate Preview</b><br><br>
 
-<p align="center">
+<a href="docs/images/generate_preview.png">
+<img src="docs/images/generate_preview.png" width="300">
+</a>
+
+<br><br>
+
 Validation summary, deliverables and generation workflow.
-</p>
 
----
+</td>
 
-### PLC Module Mapping
+<td align="center">
 
-<p align="center">
-  <img src="docs/images/plc_module_mapping.png" width="900">
-</p>
+<b>PLC Module Mapping</b><br><br>
 
-<p align="center">
+<a href="docs/images/plc_module_mapping.png">
+<img src="docs/images/plc_module_mapping.png" width="300">
+</a>
+
+<br><br>
+
 Automatic Siemens PLC module mapping and address visualization.
-</p>
+
+</td>
+</tr>
+</table>
 
 > Screenshots will be updated as new features are introduced.
 
