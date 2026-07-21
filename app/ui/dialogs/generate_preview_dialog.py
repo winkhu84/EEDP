@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QCursor
+from PySide6.QtGui import QAction, QColor, QCursor, QGuiApplication
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -27,7 +27,8 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
-    QSplitter,
+    QScrollArea,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QToolTip,
@@ -119,6 +120,34 @@ _VALIDATION_OVERALL_STYLES = {
 
 _VALIDATION_CHECK_COUNT = 7
 
+_VALIDATION_DETAILS_HEADERS = (
+    "Severity",
+    "Category",
+    "Message",
+)
+
+_VALIDATION_SEVERITY_LABELS = {
+    "PASS": "✔ PASS",
+    "WARNING": "⚠ WARNING",
+    "ERROR": "✖ ERROR",
+}
+
+_VALIDATION_SEVERITY_FG = {
+    "PASS": QColor("#1B5E20"),
+    "WARNING": QColor("#E65100"),
+    "ERROR": QColor("#B71C1C"),
+}
+
+_VALIDATION_CHECK_CATEGORIES = {
+    "devices": "Project",
+    "enabled_signals": "Signal",
+    "unaddressed_signals": "Address",
+    "duplicate_addresses": "Address",
+    "duplicate_tags": "Device",
+    "output_directory": "Output",
+    "engineering_outputs": "Export",
+}
+
 
 @dataclass(frozen=True)
 class _ValidationSummaryCounts:
@@ -138,6 +167,7 @@ class _ValidationIssue:
     severity: str
     check_name: str
     message: str
+    category: str = "Project"
 
 
 class GeneratePreviewDialog(QDialog):
@@ -155,8 +185,8 @@ class GeneratePreviewDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Generate Preview")
-        self.resize(1050, 680)
         self.setModal(True)
+        self._apply_screen_limited_size(1050, 760)
 
         self._refresh_callback = refresh_callback
         self._devices_provider = devices_provider
@@ -179,6 +209,9 @@ class GeneratePreviewDialog(QDialog):
             "Create timestamped run folder"
         )
         self.items_table = QTableWidget(0, len(_TABLE_HEADERS))
+        self.validation_details_table = QTableWidget(
+            0, len(_VALIDATION_DETAILS_HEADERS)
+        )
         self.warnings_list = QListWidget()
         self.errors_list = QListWidget()
         self.refresh_button = QPushButton("Refresh")
@@ -242,6 +275,28 @@ class GeneratePreviewDialog(QDialog):
     def result(self) -> GeneratePreviewResult:
         return self._result
 
+    def _apply_screen_limited_size(
+        self,
+        preferred_width: int,
+        preferred_height: int,
+    ) -> None:
+        """Resize within available screen geometry so the dialog fits on screen."""
+        screen = self.screen()
+        if screen is None:
+            screen = QGuiApplication.primaryScreen()
+        if screen is None:
+            self.resize(preferred_width, preferred_height)
+            return
+
+        available = screen.availableGeometry()
+        margin = 48
+        max_width = max(640, available.width() - margin)
+        max_height = max(480, available.height() - margin)
+        width = min(preferred_width, max_width)
+        height = min(preferred_height, max_height)
+        self.setMaximumHeight(max_height)
+        self.resize(width, height)
+
     def get_generation_options(self) -> GenerationOptions:
         """Return GenerationOptions from the Generate Options checkboxes."""
         return GenerationOptions(
@@ -265,7 +320,7 @@ class GeneratePreviewDialog(QDialog):
         self.refresh_validation_summary()
 
     def refresh_validation_summary(self) -> None:
-        """Recalculate summary counts and sync Warnings/Errors panels."""
+        """Recalculate summary and sync details/warning/error views."""
         issues = self._collect_validation_issues()
         self._validation_issues = issues
         counts = self._counts_from_validation_issues(issues)
@@ -277,6 +332,7 @@ class GeneratePreviewDialog(QDialog):
             counts.overall_status
         )
         self._apply_validation_overall_status_style(counts.overall_status)
+        self._populate_validation_details_table(issues)
         if not self._showing_generation_result:
             self._populate_validation_issue_panels(issues)
 
@@ -289,28 +345,28 @@ class GeneratePreviewDialog(QDialog):
 
         if summary.device_count <= 0:
             issues.append(
-                _ValidationIssue(
-                    severity="ERROR",
-                    check_name="devices",
-                    message="Project contains no devices.",
+                self._make_validation_issue(
+                    "ERROR",
+                    "devices",
+                    "Project contains no devices.",
                 )
             )
 
         if summary.enabled_signal_count <= 0:
             issues.append(
-                _ValidationIssue(
-                    severity="WARNING",
-                    check_name="enabled_signals",
-                    message="Project has no enabled signals.",
+                self._make_validation_issue(
+                    "WARNING",
+                    "enabled_signals",
+                    "Project has no enabled signals.",
                 )
             )
 
         if summary.unaddressed_count > 0:
             issues.append(
-                _ValidationIssue(
-                    severity="WARNING",
-                    check_name="unaddressed_signals",
-                    message=(
+                self._make_validation_issue(
+                    "WARNING",
+                    "unaddressed_signals",
+                    (
                         "Enabled signals are missing PLC addresses "
                         f"({summary.unaddressed_count})."
                     ),
@@ -319,10 +375,10 @@ class GeneratePreviewDialog(QDialog):
 
         if summary.duplicate_address_count > 0:
             issues.append(
-                _ValidationIssue(
-                    severity="ERROR",
-                    check_name="duplicate_addresses",
-                    message=(
+                self._make_validation_issue(
+                    "ERROR",
+                    "duplicate_addresses",
+                    (
                         "Duplicate PLC addresses exist "
                         f"({summary.duplicate_address_count})."
                     ),
@@ -332,19 +388,19 @@ class GeneratePreviewDialog(QDialog):
         duplicate_tag = self._duplicate_tag_check_severity()
         if duplicate_tag is not None:
             issues.append(
-                _ValidationIssue(
-                    severity=duplicate_tag.upper(),
-                    check_name="duplicate_tags",
-                    message="Duplicate device tags exist.",
+                self._make_validation_issue(
+                    duplicate_tag.upper(),
+                    "duplicate_tags",
+                    "Duplicate device tags exist.",
                 )
             )
 
         if not output_dir:
             issues.append(
-                _ValidationIssue(
-                    severity="ERROR",
-                    check_name="output_directory",
-                    message="Output directory is required.",
+                self._make_validation_issue(
+                    "ERROR",
+                    "output_directory",
+                    "Output directory is required.",
                 )
             )
 
@@ -354,14 +410,28 @@ class GeneratePreviewDialog(QDialog):
             or options.generate_tia_xlsx
         ):
             issues.append(
-                _ValidationIssue(
-                    severity="ERROR",
-                    check_name="engineering_outputs",
-                    message="Select at least one engineering output.",
+                self._make_validation_issue(
+                    "ERROR",
+                    "engineering_outputs",
+                    "Select at least one engineering output.",
                 )
             )
 
         return issues
+
+    @staticmethod
+    def _make_validation_issue(
+        severity: str,
+        check_name: str,
+        message: str,
+    ) -> _ValidationIssue:
+        """Create one ValidationIssue with a mapped display category."""
+        return _ValidationIssue(
+            severity=severity,
+            check_name=check_name,
+            message=message,
+            category=_VALIDATION_CHECK_CATEGORIES.get(check_name, "Project"),
+        )
 
     @staticmethod
     def _counts_from_validation_issues(
@@ -398,6 +468,49 @@ class GeneratePreviewDialog(QDialog):
                 self.warnings_list.addItem(issue.message)
             elif issue.severity == "ERROR":
                 self.errors_list.addItem(issue.message)
+
+    def _populate_validation_details_table(
+        self,
+        issues: list[_ValidationIssue],
+    ) -> None:
+        """Fill Validation Details from the shared validation issue list."""
+        rows: list[_ValidationIssue]
+        if issues:
+            rows = list(issues)
+        else:
+            rows = [
+                _ValidationIssue(
+                    severity="PASS",
+                    check_name="none",
+                    message="No validation issues detected.",
+                    category="Project",
+                )
+            ]
+
+        self.validation_details_table.setRowCount(0)
+        self.validation_details_table.setRowCount(len(rows))
+        for row, issue in enumerate(rows):
+            severity_text = _VALIDATION_SEVERITY_LABELS.get(
+                issue.severity,
+                issue.severity,
+            )
+            severity_item = QTableWidgetItem(severity_text)
+            category_item = QTableWidgetItem(issue.category)
+            message_item = QTableWidgetItem(issue.message)
+            fg = _VALIDATION_SEVERITY_FG.get(issue.severity, QColor("#212121"))
+            for column, cell in enumerate(
+                (severity_item, category_item, message_item)
+            ):
+                cell.setFlags(
+                    Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+                )
+                cell.setForeground(fg)
+                if column == 0:
+                    cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.validation_details_table.setItem(row, column, cell)
+
+        self.validation_details_table.resizeColumnToContents(0)
+        self.validation_details_table.resizeColumnToContents(1)
 
     def _duplicate_tag_check_severity(self) -> str | None:
         """Return duplicate-tag severity from existing validation entries."""
@@ -462,7 +575,29 @@ class GeneratePreviewDialog(QDialog):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
 
-        summary_box = QGroupBox("Project Summary")
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        scroll_area.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+
+        content = QWidget()
+        content.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Minimum,
+        )
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 8, 0)
+        content_layout.setSpacing(8)
+        content_layout.setSizeConstraint(
+            QVBoxLayout.SizeConstraint.SetMinimumSize
+        )
+
+        summary_box = QGroupBox("Project Summary", content)
         summary_grid = QGridLayout(summary_box)
         fields = (
             ("customer", "Customer"),
@@ -484,9 +619,9 @@ class GeneratePreviewDialog(QDialog):
             value_label = QLabel("-")
             self._summary_labels[key] = value_label
             summary_grid.addWidget(value_label, row, col + 1)
-        layout.addWidget(summary_box)
+        content_layout.addWidget(summary_box, 0)
 
-        validation_summary_box = QGroupBox("Validation Summary")
+        validation_summary_box = QGroupBox("Validation Summary", content)
         validation_grid = QGridLayout(validation_summary_box)
         validation_fields = (
             ("checks", "Checks"),
@@ -502,9 +637,41 @@ class GeneratePreviewDialog(QDialog):
             value_label = QLabel("-")
             self._validation_summary_labels[key] = value_label
             validation_grid.addWidget(value_label, row, col + 1)
-        layout.addWidget(validation_summary_box)
+        content_layout.addWidget(validation_summary_box, 0)
 
-        dir_row = QHBoxLayout()
+        validation_details_box = QGroupBox("Validation Details", content)
+        validation_details_layout = QVBoxLayout(validation_details_box)
+        validation_details_layout.setContentsMargins(8, 8, 8, 8)
+        self.validation_details_table.setHorizontalHeaderLabels(
+            list(_VALIDATION_DETAILS_HEADERS)
+        )
+        self.validation_details_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.validation_details_table.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
+        self.validation_details_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.validation_details_table.verticalHeader().setVisible(False)
+        self.validation_details_table.verticalHeader().setDefaultSectionSize(22)
+        self.validation_details_table.setMinimumHeight(90)
+        self.validation_details_table.setMaximumHeight(140)
+        details_header = self.validation_details_table.horizontalHeader()
+        details_header.setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        details_header.setSectionResizeMode(
+            1, QHeaderView.ResizeMode.ResizeToContents
+        )
+        details_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        validation_details_layout.addWidget(self.validation_details_table)
+        content_layout.addWidget(validation_details_box, 0)
+
+        output_dir_row = QWidget(content)
+        dir_row = QHBoxLayout(output_dir_row)
+        dir_row.setContentsMargins(0, 0, 0, 0)
         dir_row.addWidget(QLabel("Output Directory"))
         self.output_dir_edit.setMinimumWidth(400)
         dir_row.addWidget(self.output_dir_edit, stretch=1)
@@ -514,10 +681,10 @@ class GeneratePreviewDialog(QDialog):
         self.open_folder_button.setToolTip("Open the selected output folder.")
         dir_row.addWidget(self.browse_button)
         dir_row.addWidget(self.open_folder_button)
-        layout.addLayout(dir_row)
+        content_layout.addWidget(output_dir_row, 0)
 
-        options_box = QGroupBox("Generate Options")
-        options_layout = QHBoxLayout()
+        options_box = QGroupBox("Generate Options", content)
+        options_layout = QHBoxLayout(options_box)
         options_layout.setContentsMargins(8, 8, 8, 8)
         options_layout.setSpacing(16)
         self.fc_io_option_check.setChecked(True)
@@ -535,12 +702,10 @@ class GeneratePreviewDialog(QDialog):
         options_layout.addWidget(self.generation_report_option_check)
         options_layout.addWidget(self.timestamp_folder_option_check)
         options_layout.addStretch()
-        options_box.setLayout(options_layout)
-        layout.addWidget(options_box)
+        content_layout.addWidget(options_box, 0)
 
-        splitter = QSplitter(Qt.Orientation.Vertical)
-
-        top_splitter = QSplitter(Qt.Orientation.Vertical)
+        # Row 1: deliverable table
+        self.items_table.setParent(content)
         self.items_table.setHorizontalHeaderLabels(list(_TABLE_HEADERS))
         self.items_table.setSelectionBehavior(
             QTableWidget.SelectionBehavior.SelectRows
@@ -550,11 +715,17 @@ class GeneratePreviewDialog(QDialog):
         )
         self.items_table.verticalHeader().setVisible(False)
         self.items_table.verticalHeader().setDefaultSectionSize(24)
-        self.items_table.setMinimumHeight(260)
+        self.items_table.setMinimumHeight(180)
+        self.items_table.setMaximumHeight(230)
+        self.items_table.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
         self._configure_table_column_sizing()
-        top_splitter.addWidget(self.items_table)
+        content_layout.addWidget(self.items_table, 0)
 
-        detail_box = QGroupBox("Deliverable Details")
+        # Row 2: deliverable details (single instance)
+        detail_box = QGroupBox("Deliverable Details", content)
         detail_grid = QGridLayout(detail_box)
         detail_grid.setContentsMargins(8, 8, 8, 8)
         detail_grid.setHorizontalSpacing(12)
@@ -613,31 +784,45 @@ class GeneratePreviewDialog(QDialog):
         )
         detail_grid.setColumnStretch(1, 1)
         detail_grid.setColumnStretch(3, 1)
-        detail_box.setMaximumHeight(190)
-        top_splitter.addWidget(detail_box)
-        top_splitter.setStretchFactor(0, 5)
-        top_splitter.setStretchFactor(1, 0)
-        top_splitter.setCollapsible(0, False)
-        top_splitter.setCollapsible(1, False)
-        top_splitter.setSizes([360, 150])
-        splitter.addWidget(top_splitter)
+        detail_box.setMinimumHeight(150)
+        detail_box.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+        self._deliverable_details_box = detail_box
+        content_layout.addWidget(detail_box, 0)
 
-        validation = QWidget()
-        val_layout = QHBoxLayout(validation)
-        val_layout.setContentsMargins(0, 0, 0, 0)
-        warnings_box = QGroupBox("Warnings")
+        # Row 3: warnings / errors side-by-side
+        warnings_errors_row = QWidget(content)
+        warnings_errors_layout = QHBoxLayout(warnings_errors_row)
+        warnings_errors_layout.setContentsMargins(0, 0, 0, 0)
+        warnings_errors_layout.setSpacing(8)
+        warnings_box = QGroupBox("Warnings", warnings_errors_row)
         warnings_layout = QVBoxLayout(warnings_box)
         warnings_layout.addWidget(self.warnings_list)
-        errors_box = QGroupBox("Errors")
+        errors_box = QGroupBox("Errors", warnings_errors_row)
         errors_layout = QVBoxLayout(errors_box)
         errors_layout.addWidget(self.errors_list)
-        val_layout.addWidget(warnings_box)
-        val_layout.addWidget(errors_box)
-        splitter.addWidget(validation)
-        splitter.setStretchFactor(0, 4)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([520, 140])
-        layout.addWidget(splitter, stretch=1)
+        self.warnings_list.setMinimumHeight(110)
+        self.errors_list.setMinimumHeight(110)
+        warnings_box.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+        errors_box.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+        warnings_errors_row.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+        warnings_errors_layout.addWidget(warnings_box, 1)
+        warnings_errors_layout.addWidget(errors_box, 1)
+        content_layout.addWidget(warnings_errors_row, 0)
+
+        scroll_area.setWidget(content)
+        layout.addWidget(scroll_area, stretch=1)
 
         buttons = QHBoxLayout()
         buttons.addWidget(self.refresh_button)
