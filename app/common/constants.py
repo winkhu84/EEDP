@@ -1,7 +1,7 @@
 """Application-wide constants."""
 
 APP_NAME = "EEDP Studio"
-APP_VERSION = "0.2"
+APP_VERSION = "0.4.0"
 APP_TITLE = f"{APP_NAME} v{APP_VERSION}"
 
 WINDOW_WIDTH = 1600
