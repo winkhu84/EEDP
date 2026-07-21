@@ -108,6 +108,8 @@ This structure improves maintainability, scalability and future feature developm
 
 ## Screenshots
 
+Explore the primary engineering workflows available in EEDP Studio.
+
 <table>
 <tr>
 <td align="center" width="33%">
