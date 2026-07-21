@@ -108,53 +108,30 @@ This structure improves maintainability, scalability and future feature developm
 
 ## Screenshots
 
-<table align="center">
+<table>
 <tr>
-<td align="center">
-
+<td align="center" width="33%">
 <b>Main Window</b><br><br>
-
-<a href="docs/images/main_window.png">
-<img src="docs/images/main_window.png" width="300">
-</a>
-
+<a href="docs/images/main_window.png"><img src="docs/images/main_window.png" width="300" alt="Main Window"></a>
 <br><br>
-
 Project management and device engineering workspace.
-
 </td>
-
-<td align="center">
-
+<td align="center" width="33%">
 <b>Generate Preview</b><br><br>
-
-<a href="docs/images/generate_preview.png">
-<img src="docs/images/generate_preview.png" width="300">
-</a>
-
+<a href="docs/images/generate_preview.png"><img src="docs/images/generate_preview.png" width="300" alt="Generate Preview"></a>
 <br><br>
-
 Validation summary, deliverables and generation workflow.
-
 </td>
-
-<td align="center">
-
+<td align="center" width="33%">
 <b>PLC Module Mapping</b><br><br>
-
-<a href="docs/images/plc_module_mapping.png">
-<img src="docs/images/plc_module_mapping.png" width="300">
-</a>
-
+<a href="docs/images/plc_module_mapping.png"><img src="docs/images/plc_module_mapping.png" width="300" alt="PLC Module Mapping"></a>
 <br><br>
-
 Automatic Siemens PLC module mapping and address visualization.
-
 </td>
 </tr>
 </table>
 
-> Screenshots will be updated as new features are introduced.
+<p><em>Screenshots will be updated as new features are introduced.</em></p>
 
 ## Quick Links
 
