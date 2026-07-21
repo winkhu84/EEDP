@@ -830,14 +830,10 @@ class MainController:
         dialog = GeneratePreviewDialog(
             preview,
             refresh_callback=refresh,
+            devices_provider=lambda: list(self._device_manager.devices),
             parent=self._view,
         )
         dialog_holder["dialog"] = dialog
-        dialog.generate_requested.connect(
-            lambda items, output_dir: self._on_generate_selected(
-                dialog, items, output_dir
-            )
-        )
         dialog.exec()
 
     def _on_generate_selected(
