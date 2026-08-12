@@ -16,6 +16,17 @@ class SignalRule:
     signal_type: str
     description: str = ""
     required: bool = True
+    remark: str = ""
+    default_enabled: bool | None = None
+    signal_id: str = ""
+    order: int = 0
+
+    @property
+    def resolved_default_enabled(self) -> bool:
+        """Return explicit default_enabled, otherwise match required."""
+        if self.default_enabled is None:
+            return self.required
+        return self.default_enabled
 
 
 @dataclass(frozen=True)
@@ -121,23 +132,37 @@ class RuleEngine:
             name=name,
             category=str(data.get("category", "")).strip(),
             description=str(data.get("description", "")).strip(),
-            signals=self._parse_device_signals(data),
+            signals=self._parse_device_signals(data, device_type=name),
         )
 
     @classmethod
-    def _parse_device_signals(cls, data: dict) -> tuple[SignalRule, ...]:
+    def _parse_device_signals(
+        cls,
+        data: dict,
+        *,
+        device_type: str,
+    ) -> tuple[SignalRule, ...]:
         """Prefer ordered `signals`; fall back to required + optional lists."""
         raw_signals = data.get("signals")
         if isinstance(raw_signals, list):
-            return cls._parse_signals(raw_signals, default_required=True)
+            return cls._parse_signals(
+                raw_signals,
+                default_required=True,
+                device_type=device_type,
+                start_order=0,
+            )
 
         required = cls._parse_signals(
             data.get("required_signals"),
             default_required=True,
+            device_type=device_type,
+            start_order=0,
         )
         optional = cls._parse_signals(
             data.get("optional_signals"),
             default_required=False,
+            device_type=device_type,
+            start_order=len(required),
         )
         return required + optional
 
@@ -146,11 +171,16 @@ class RuleEngine:
         raw: object,
         *,
         default_required: bool,
+        device_type: str = "",
+        start_order: int = 0,
     ) -> tuple[SignalRule, ...]:
         if not isinstance(raw, list):
             return ()
 
+        from app.model.signal_template import make_template_signal_id
+
         signals: list[SignalRule] = []
+        order = start_order
         for item in raw:
             if not isinstance(item, dict):
                 continue
@@ -159,18 +189,40 @@ class RuleEngine:
                 item.get("signal_type", item.get("io_type", ""))
             ).strip()
             description = str(item.get("description", "")).strip()
+            remark = str(item.get("remark", "")).strip()
             if not signal_name or not signal_type:
                 continue
             if "required" in item:
                 required = bool(item.get("required"))
             else:
                 required = default_required
+            if "default_enabled" in item:
+                default_enabled: bool | None = bool(item.get("default_enabled"))
+            else:
+                default_enabled = None
+            if "order" in item:
+                try:
+                    order_value = int(item.get("order"))
+                except (TypeError, ValueError):
+                    order_value = order
+            else:
+                order_value = order
+            explicit_id = str(item.get("id", "")).strip()
+            signal_id = explicit_id or make_template_signal_id(
+                device_type,
+                signal_name,
+            )
             signals.append(
                 SignalRule(
                     name=signal_name,
                     signal_type=signal_type,
                     description=description,
                     required=required,
+                    remark=remark,
+                    default_enabled=default_enabled,
+                    signal_id=signal_id,
+                    order=order_value,
                 )
             )
+            order += 1
         return tuple(signals)

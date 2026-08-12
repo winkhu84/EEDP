@@ -61,7 +61,7 @@ class SignalEngine:
             signal = self._from_rule_item(
                 item,
                 required=item.required,
-                enabled=item.required,
+                enabled=item.resolved_default_enabled,
             )
             device.add_signal(signal)
             signals.append(signal)
@@ -85,4 +85,5 @@ class SignalEngine:
             required=required,
             enabled=enabled,
             description=item.description,
+            remark=item.remark,
         )

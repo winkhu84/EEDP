@@ -18,6 +18,12 @@ from app.model.project import Project
 from app.model.recommendation import IoSummary, Recommendation, RecommendationResult
 from app.model.rules import Rules
 from app.model.signal import Signal
+from app.model.signal_template import (
+    SignalTemplate,
+    TemplateSignal,
+    make_template_signal_id,
+    slugify_identifier,
+)
 
 __all__ = [
     "Area",
@@ -35,5 +41,9 @@ __all__ = [
     "RecommendationResult",
     "Rules",
     "Signal",
+    "SignalTemplate",
+    "TemplateSignal",
     "default_plc_card_configurations",
+    "make_template_signal_id",
+    "slugify_identifier",
 ]
