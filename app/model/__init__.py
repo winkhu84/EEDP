@@ -20,9 +20,12 @@ from app.model.rules import Rules
 from app.model.signal import Signal
 from app.model.signal_template import (
     SignalTemplate,
+    TemplateIdentityError,
     TemplateSignal,
+    make_template_id,
     make_template_signal_id,
     slugify_identifier,
+    template_to_yaml_data,
 )
 
 __all__ = [
@@ -42,8 +45,11 @@ __all__ = [
     "Rules",
     "Signal",
     "SignalTemplate",
+    "TemplateIdentityError",
     "TemplateSignal",
     "default_plc_card_configurations",
+    "make_template_id",
     "make_template_signal_id",
     "slugify_identifier",
+    "template_to_yaml_data",
 ]

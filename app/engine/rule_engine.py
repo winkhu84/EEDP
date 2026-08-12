@@ -7,6 +7,12 @@ from pathlib import Path
 
 import yaml
 
+from app.model.signal_template import (
+    TemplateIdentityError,
+    resolve_signal_id,
+    resolve_template_id,
+)
+
 
 @dataclass(frozen=True)
 class SignalRule:
@@ -37,6 +43,7 @@ class DeviceRule:
     category: str
     description: str
     signals: tuple[SignalRule, ...]
+    id: str = ""
 
     @property
     def required_signals(self) -> tuple[SignalRule, ...]:
@@ -54,6 +61,7 @@ UNKNOWN_DEVICE = DeviceRule(
     category="Unknown",
     description="Unknown device type. No library rule found.",
     signals=(),
+    id="unknown",
 )
 
 _LIBRARY_SUBDIRS = (
@@ -73,12 +81,22 @@ class RuleEngine:
             library_root = Path(__file__).resolve().parents[2] / "library"
         self._library_root = Path(library_root)
         self._rules: dict[str, DeviceRule] = {}
+        self._rules_by_id: dict[str, DeviceRule] = {}
+        self._load_errors: tuple[str, ...] = ()
         self.reload()
+
+    @property
+    def load_errors(self) -> tuple[str, ...]:
+        """Human-readable identity / load failures from the last reload."""
+        return self._load_errors
 
     def reload(self) -> None:
         """Reload all YAML rules from the library folders."""
         self._rules.clear()
+        self._rules_by_id.clear()
+        errors: list[str] = []
         if not self._library_root.is_dir():
+            self._load_errors = tuple(errors)
             return
 
         seen_dirs: set[Path] = set()
@@ -91,16 +109,32 @@ class RuleEngine:
                 continue
             seen_dirs.add(resolved)
             for path in sorted(folder.glob("*.yaml")):
-                rule = self._load_yaml_file(path)
-                if rule is not None:
-                    self._rules[rule.name] = rule
+                rule = self._load_yaml_file(path, errors)
+                if rule is None:
+                    continue
+                if rule.id in self._rules_by_id:
+                    existing = self._rules_by_id[rule.id]
+                    errors.append(
+                        f"Duplicate template id '{rule.id}' in {path.name} "
+                        f"(already used by '{existing.name}')."
+                    )
+                    continue
+                if rule.name in self._rules:
+                    errors.append(
+                        f"Duplicate template name '{rule.name}' in {path.name}."
+                    )
+                    continue
+                self._rules[rule.name] = rule
+                self._rules_by_id[rule.id] = rule
+
+        self._load_errors = tuple(errors)
 
     def load_rule(self, device_type: str) -> DeviceRule:
-        """Return the rule for a device type, or Unknown Device if missing."""
+        """Return the rule for a device type name or id, or Unknown Device."""
         key = device_type.strip()
         if not key:
             return UNKNOWN_DEVICE
-        return self._rules.get(key, UNKNOWN_DEVICE)
+        return self._rules.get(key) or self._rules_by_id.get(key, UNKNOWN_DEVICE)
 
     def get_required_signals(self, device_type: str) -> tuple[SignalRule, ...]:
         """Return required signals for a device type."""
@@ -114,25 +148,41 @@ class RuleEngine:
         """Return device type names currently loaded from the library."""
         return tuple(sorted(self._rules.keys()))
 
-    def _load_yaml_file(self, path: Path) -> DeviceRule | None:
+    def _load_yaml_file(
+        self,
+        path: Path,
+        errors: list[str],
+    ) -> DeviceRule | None:
         try:
             with path.open(encoding="utf-8") as handle:
                 data = yaml.safe_load(handle)
-        except (OSError, yaml.YAMLError):
+        except (OSError, yaml.YAMLError) as exc:
+            errors.append(f"Failed to read {path.name}: {exc}")
             return None
 
         if not isinstance(data, dict):
+            errors.append(f"Invalid YAML structure in {path.name}.")
             return None
 
         name = str(data.get("name", "")).strip()
         if not name:
+            errors.append(f"Missing template name in {path.name}.")
+            return None
+
+        try:
+            template_id = resolve_template_id(str(data.get("id", "")), name)
+            signals = self._parse_device_signals(data, device_type=name)
+            self._validate_signal_ids(signals, path.name)
+        except TemplateIdentityError as exc:
+            errors.append(f"{path.name}: {exc}")
             return None
 
         return DeviceRule(
             name=name,
             category=str(data.get("category", "")).strip(),
             description=str(data.get("description", "")).strip(),
-            signals=self._parse_device_signals(data, device_type=name),
+            signals=signals,
+            id=template_id,
         )
 
     @classmethod
@@ -177,8 +227,6 @@ class RuleEngine:
         if not isinstance(raw, list):
             return ()
 
-        from app.model.signal_template import make_template_signal_id
-
         signals: list[SignalRule] = []
         order = start_order
         for item in raw:
@@ -207,10 +255,10 @@ class RuleEngine:
                     order_value = order
             else:
                 order_value = order
-            explicit_id = str(item.get("id", "")).strip()
-            signal_id = explicit_id or make_template_signal_id(
-                device_type,
-                signal_name,
+            signal_id = resolve_signal_id(
+                str(item.get("id", "")),
+                device_type=device_type,
+                signal_name=signal_name,
             )
             signals.append(
                 SignalRule(
@@ -226,3 +274,17 @@ class RuleEngine:
             )
             order += 1
         return tuple(signals)
+
+    @staticmethod
+    def _validate_signal_ids(signals: tuple[SignalRule, ...], filename: str) -> None:
+        seen: set[str] = set()
+        for item in signals:
+            if not item.signal_id:
+                raise TemplateIdentityError(
+                    f"Empty signal id in {filename} ({item.name})."
+                )
+            if item.signal_id in seen:
+                raise TemplateIdentityError(
+                    f"Duplicate signal id '{item.signal_id}' in {filename}."
+                )
+            seen.add(item.signal_id)

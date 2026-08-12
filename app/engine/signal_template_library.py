@@ -4,13 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 from app.engine.rule_engine import DeviceRule, RuleEngine, SignalRule, UNKNOWN_DEVICE
 from app.model.device import Device
 from app.model.signal import Signal
 from app.model.signal_template import (
     SignalTemplate,
+    TemplateIdentityError,
     TemplateSignal,
     make_template_signal_id,
+    template_to_yaml_data,
 )
 
 
@@ -48,11 +52,37 @@ def template_from_device_rule(rule: DeviceRule) -> SignalTemplate:
         for index, item in enumerate(rule.signals)
     )
     return SignalTemplate(
+        id=rule.id,
         device_type=rule.name,
         category=rule.category,
         description=rule.description,
         signals=signals,
     )
+
+
+def write_yaml_atomic(path: Path | str, data: dict) -> None:
+    """Write YAML via a temp file, validate, then atomically replace the target."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(target.name + ".tmp")
+    text = yaml.safe_dump(
+        data,
+        allow_unicode=True,
+        sort_keys=False,
+        default_flow_style=False,
+    )
+    tmp.write_text(text, encoding="utf-8", newline="\n")
+    try:
+        loaded = yaml.safe_load(tmp.read_text(encoding="utf-8"))
+        if not isinstance(loaded, dict):
+            raise TemplateIdentityError("Serialized YAML is not a mapping.")
+        if not str(loaded.get("id", "")).strip() or not str(loaded.get("name", "")).strip():
+            raise TemplateIdentityError("Serialized YAML is missing id or name.")
+        tmp.replace(target)
+    except Exception:
+        if tmp.exists():
+            tmp.unlink()
+        raise
 
 
 class SignalTemplateLibrary:
@@ -69,6 +99,11 @@ class SignalTemplateLibrary:
         else:
             self._rule_engine = RuleEngine(library_root)
 
+    @property
+    def load_errors(self) -> tuple[str, ...]:
+        """Identity / load failures from the last reload."""
+        return self._rule_engine.load_errors
+
     def reload(self) -> None:
         """Reload templates from YAML."""
         self._rule_engine.reload()
@@ -78,11 +113,15 @@ class SignalTemplateLibrary:
         return self._rule_engine.available_types()
 
     def get_template(self, device_type: str) -> SignalTemplate | None:
-        """Return the template for a Device Type, or None when unknown."""
+        """Return the template for a Device Type name or id, or None."""
         rule = self._rule_engine.load_rule(device_type)
         if rule is UNKNOWN_DEVICE or rule.name == "Unknown":
             return None
         return template_from_device_rule(rule)
+
+    def get_template_by_id(self, template_id: str) -> SignalTemplate | None:
+        """Return the template for a persistent id, or None."""
+        return self.get_template(template_id)
 
     def get_signals(self, device_type: str) -> tuple[TemplateSignal, ...]:
         """Return ordered template signals for a Device Type."""
@@ -116,3 +155,24 @@ class SignalTemplateLibrary:
         for signal in copies:
             device.add_signal(signal)
         return copies
+
+    def serialize_template(self, template: SignalTemplate) -> dict:
+        """Return the canonical YAML-compatible mapping for a template."""
+        return template_to_yaml_data(template)
+
+    def save_template(self, template: SignalTemplate, path: Path | str) -> None:
+        """Atomically write a template YAML file. Does not reload the library."""
+        write_yaml_atomic(path, template_to_yaml_data(template))
+
+    def duplicate_template(
+        self,
+        template: SignalTemplate,
+        *,
+        new_id: str,
+        new_device_type: str,
+    ) -> SignalTemplate:
+        """Return an independent copy with a new id and display name."""
+        return template.copy_with_identity(
+            new_id=new_id,
+            new_device_type=new_device_type,
+        )

@@ -80,6 +80,7 @@ from app.engine.signal_template_library import (
     SignalTemplateLibrary,
     template_from_device_rule,
     template_signal_from_rule,
+    write_yaml_atomic,
 )
 from app.engine.tag_type_resolver import resolve_device_category, resolve_device_type
 
@@ -104,6 +105,7 @@ __all__ = [
     "SignalEngine",
     "SignalRule",
     "SignalTemplateLibrary",
+    "write_yaml_atomic",
     "UNKNOWN_DEVICE",
     "ValidationEntry",
     "apply_default_use_start_flags",
