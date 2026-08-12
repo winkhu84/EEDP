@@ -1,13 +1,15 @@
 """Recommendation Engine.
 
-Produces signal recommendations and Signal objects for a Device.
+Produces UI recommendation data and copies SignalTemplate signals onto Devices.
+SignalTemplateLibrary is the single authoritative template source.
 """
 
 from __future__ import annotations
 
 from app.engine.address_manager import apply_default_use_start_flags
-from app.engine.rule_engine import DeviceRule, RuleEngine, UNKNOWN_DEVICE
+from app.engine.rule_engine import RuleEngine
 from app.engine.signal_engine import SignalEngine
+from app.engine.signal_template_library import SignalTemplateLibrary
 from app.model.device import Device
 from app.model.recommendation import IoSummary, Recommendation, RecommendationResult
 
@@ -32,61 +34,70 @@ def build_io_summary(
 
 
 class RecommendationEngine:
-    """Applies library rules: UI recommendations + Device Signal objects."""
+    """GUI adapter: templates from SignalTemplateLibrary, owned copies on Device."""
 
     def __init__(
         self,
         rule_engine: RuleEngine | None = None,
         signal_engine: SignalEngine | None = None,
+        *,
+        template_library: SignalTemplateLibrary | None = None,
     ) -> None:
-        self._rule_engine = rule_engine or RuleEngine()
+        if template_library is not None:
+            self._library = template_library
+        else:
+            self._library = SignalTemplateLibrary(rule_engine=rule_engine)
         self._signal_engine = signal_engine or SignalEngine()
 
-    def recommend(self, device: Device) -> RecommendationResult:
-        """Create Signal objects on the device and return UI recommendation data."""
-        rule = self._rule_engine.load_rule(device.type)
-        self._signal_engine.create_signals_from_rule(device, rule)
-        apply_default_use_start_flags(device)
-        return self._to_result(device, rule)
-
-    def ensure_signals(self, device: Device) -> RecommendationResult:
-        """Apply rules when signals are missing or contain legacy Local/Remote Mode."""
-        if (
-            not device.signals
-            or self._signal_engine.needs_legacy_mode_migration(device)
-        ):
-            return self.recommend(device)
-        return self.recommendation_result(device)
-
-    def recommendation_result(self, device: Device) -> RecommendationResult:
-        """Build UI recommendation data without recreating Signal objects."""
-        rule = self._rule_engine.load_rule(device.type)
-        return self._to_result(device, rule)
-
-    def supported_types(self) -> tuple[str, ...]:
-        """Return device types available from the Rule Engine library."""
-        return self._rule_engine.available_types()
-
-    @staticmethod
-    def _to_result(device: Device, rule: DeviceRule) -> RecommendationResult:
-        return RecommendationResult(
-            device_id=device.id,
-            device_tag=device.tag,
-            device_type=device.type,
-            recommendations=RecommendationEngine._build_recommendations(rule),
-        )
-
-    @staticmethod
-    def _build_recommendations(rule: DeviceRule) -> tuple[Recommendation, ...]:
-        if rule is UNKNOWN_DEVICE or rule.name == "Unknown":
-            return ()
-
-        items: list[Recommendation] = [
+    def recommendations_for_type(
+        self,
+        device_type: str,
+    ) -> tuple[Recommendation, ...]:
+        """Return ordered Recommended Signals for a Device Type (display only)."""
+        return tuple(
             Recommendation(
                 name=item.name,
                 signal_type=item.signal_type,
                 required=item.required,
             )
-            for item in rule.signals
-        ]
-        return tuple(items)
+            for item in self._library.get_signals(device_type)
+        )
+
+    def recommend(self, device: Device) -> RecommendationResult:
+        """Copy the Device Type template onto the device as owned signals.
+
+        Unknown types are not mutated. Known types replace device.signals
+        with independent copies (no live template references).
+        """
+        template = self._library.get_template(device.type)
+        if template is None:
+            apply_default_use_start_flags(device)
+            return self.recommendation_result(device)
+
+        self._library.apply_copy_to_device(device)
+        apply_default_use_start_flags(device)
+        return self.recommendation_result(device)
+
+    def ensure_signals(self, device: Device) -> RecommendationResult:
+        """Apply a template only on the safe legacy Local/Remote Mode path.
+
+        Empty devices are not initialized here. New devices are copied via
+        recommend() at Add Device time so Import IO List selection cannot
+        fill or replace project data.
+        """
+        if self._signal_engine.needs_legacy_mode_migration(device):
+            return self.recommend(device)
+        return self.recommendation_result(device)
+
+    def recommendation_result(self, device: Device) -> RecommendationResult:
+        """Build UI recommendation data without mutating Device.signals."""
+        return RecommendationResult(
+            device_id=device.id,
+            device_tag=device.tag,
+            device_type=device.type,
+            recommendations=self.recommendations_for_type(device.type),
+        )
+
+    def supported_types(self) -> tuple[str, ...]:
+        """Return device types available from the Signal Template library."""
+        return self._library.device_types()

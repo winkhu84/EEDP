@@ -134,7 +134,7 @@ class MainController:
 
         last_item = None
         for device in result.devices:
-            self._recommendation_engine.ensure_signals(device)
+            self._recommendation_engine.recommend(device)
             item = self._view.project_tree.add_device(device)
             if item is not None:
                 last_item = item
@@ -235,15 +235,9 @@ class MainController:
             self._refresh_io_summaries()
             return
 
-        # Apply recommendation when empty or when legacy Local/Remote Mode exists.
+        # Display recommendations only. Apply is limited to legacy migration;
+        # empty imported devices are not overwritten on first selection.
         result = self._recommendation_engine.ensure_signals(device)
-
-        # DEBUG (testing only) — remove later
-        print(device)
-        print(len(device.signals))
-        for signal in device.signals:
-            print(signal.name)
-
         self._view.property_editor.show_device(device, result)
         self._refresh_address_conflict_status(show_dialog=False)
         self._refresh_io_summaries()
