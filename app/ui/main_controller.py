@@ -19,6 +19,7 @@ from app.engine.address_manager import (
     format_conflict_message,
 )
 from app.engine.device_manager import DeviceDraft, DeviceManager, suggest_next_tag
+from app.engine.device_type_catalog import resolve_gui_device_types
 from app.engine.fc_io_generator import generate_project_rows
 from app.engine.generate_preview_engine import (
     build_default_file_name,
@@ -107,8 +108,27 @@ class MainController:
         signal_editor.remove_requested.connect(self._on_remove_signal)
         signal_editor.duplicate_requested.connect(self._on_duplicate_signal)
 
+        self.refresh_device_types()
         self._update_device_action_state()
         self._refresh_io_summaries()
+
+    def refresh_device_types(self, extra_type: str = "") -> None:
+        """Reload the Device Type combo from SignalTemplateLibrary.
+
+        DEVICE_TYPES is used only when the library returns no usable types.
+        extra_type and in-memory device types are appended when missing so
+        custom / imported / unknown types stay visible. Does not apply templates.
+        """
+        try:
+            library_types = self._recommendation_engine.supported_types()
+        except Exception:  # noqa: BLE001 - combo must still populate on library failure
+            library_types = ()
+
+        extras = [device.type for device in self._device_manager.devices]
+        if extra_type.strip():
+            extras.append(extra_type)
+        types = resolve_gui_device_types(library_types, extra_types=extras)
+        self._view.device_manager.set_device_types(types)
 
     def _selected_device(self):
         device_id = self._view.project_tree.selected_device_id()
@@ -224,6 +244,7 @@ class MainController:
                 f"({result.unique_tags} unique tags from {result.source_rows} rows).",
                 6000,
             )
+        self.refresh_device_types()
         self._refresh_io_summaries()
 
     def _on_tree_selection_changed(self) -> None:
@@ -234,6 +255,8 @@ class MainController:
             self._view.property_editor.clear()
             self._refresh_io_summaries()
             return
+
+        self.refresh_device_types(extra_type=device.type)
 
         # Display recommendations only. Apply is limited to legacy migration;
         # empty imported devices are not overwritten on first selection.

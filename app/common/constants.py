@@ -39,6 +39,9 @@ DEVICE_CATEGORIES = (
     "Instrument",
 )
 
+# Display-order preference and empty-library fallback for the Device Type combo.
+# Membership comes from SignalTemplateLibrary.device_types(); do not treat this
+# tuple as the live catalog. Safe to remove after Template Manager lands.
 DEVICE_TYPES = (
     "Pump",
     "Valve",

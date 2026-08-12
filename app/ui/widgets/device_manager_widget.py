@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
@@ -48,6 +50,7 @@ class DeviceManagerWidget(QWidget):
 
         self.area_combo.addItems(DEVICE_AREAS)
         self.category_combo.addItems(DEVICE_CATEGORIES)
+        # Temporary fallback until MainController.refresh_device_types() runs.
         self.type_combo.addItems(DEVICE_TYPES)
 
         self.tag_edit.setPlaceholderText("Tag")
@@ -66,3 +69,28 @@ class DeviceManagerWidget(QWidget):
 
         root.addWidget(form_box)
         root.addStretch(1)
+
+    def set_device_types(
+        self,
+        types: Sequence[str],
+        *,
+        selected: str | None = None,
+    ) -> None:
+        """Replace Type combo items. Preserve the current selection when possible."""
+        previous = selected if selected is not None else self.type_combo.currentText()
+        self.type_combo.blockSignals(True)
+        self.type_combo.clear()
+        self.type_combo.addItems(list(types))
+        index = self.type_combo.findText(previous)
+        if index >= 0:
+            self.type_combo.setCurrentIndex(index)
+        elif self.type_combo.count() > 0:
+            self.type_combo.setCurrentIndex(0)
+        self.type_combo.blockSignals(False)
+
+    def device_types(self) -> tuple[str, ...]:
+        """Return Type combo items in display order."""
+        return tuple(
+            self.type_combo.itemText(index)
+            for index in range(self.type_combo.count())
+        )
