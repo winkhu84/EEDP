@@ -24,6 +24,8 @@ from app.model.signal_template import (
     TemplateSignal,
     make_template_id,
     make_template_signal_id,
+    next_display_name,
+    next_template_id,
     slugify_identifier,
     template_to_yaml_data,
 )
@@ -50,6 +52,8 @@ __all__ = [
     "default_plc_card_configurations",
     "make_template_id",
     "make_template_signal_id",
+    "next_display_name",
+    "next_template_id",
     "slugify_identifier",
     "template_to_yaml_data",
 ]

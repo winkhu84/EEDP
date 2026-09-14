@@ -44,6 +44,7 @@ class DeviceRule:
     description: str
     signals: tuple[SignalRule, ...]
     id: str = ""
+    source_path: str = ""
 
     @property
     def required_signals(self) -> tuple[SignalRule, ...]:
@@ -183,6 +184,7 @@ class RuleEngine:
             description=str(data.get("description", "")).strip(),
             signals=signals,
             id=template_id,
+            source_path=str(path),
         )
 
     @classmethod

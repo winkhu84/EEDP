@@ -7,9 +7,12 @@ They are copied onto Device.signals; devices never hold live template refs.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 
 from app.model.signal import Signal
+
+VALID_IO_TYPES = frozenset({"DI", "DO", "AI", "AO"})
 
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 _TEMPLATE_ID = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -124,6 +127,7 @@ class SignalTemplate:
     category: str = ""
     description: str = ""
     signals: tuple[TemplateSignal, ...] = field(default_factory=tuple)
+    source_path: str = ""
 
     def signals_in_order(self) -> tuple[TemplateSignal, ...]:
         """Return template signals sorted by display/order position."""
@@ -151,7 +155,102 @@ class SignalTemplate:
             category=self.category,
             description=self.description,
             signals=tuple(replace(item) for item in self.signals),
+            source_path="",
         )
+
+
+def next_display_name(base: str, existing: Iterable[str]) -> str:
+    """Return '{base} Copy' or '{base} Copy N' that is not in existing names."""
+    stem = base.strip() or "Template"
+    taken = {item.strip() for item in existing}
+    candidate = f"{stem} Copy"
+    if candidate not in taken:
+        return candidate
+    index = 2
+    while f"{stem} Copy {index}" in taken:
+        index += 1
+    return f"{stem} Copy {index}"
+
+
+def next_template_id(base_id: str, existing: Iterable[str]) -> str:
+    """Return base_id, '{base}_copy', or '{base}_copy_N' that is unused."""
+    stem = base_id.strip() or "template"
+    taken = {item.strip() for item in existing}
+    if stem not in taken and is_valid_template_id(stem):
+        return stem
+    candidate = f"{stem}_copy"
+    if candidate not in taken:
+        return candidate
+    index = 2
+    while f"{stem}_copy_{index}" in taken:
+        index += 1
+    return f"{stem}_copy_{index}"
+
+
+def next_signal_id(base: str, existing: Iterable[str]) -> str:
+    """Return a unique signal id derived from base."""
+    stem = slugify_identifier(base)
+    if stem[0].isdigit():
+        stem = f"s_{stem}"
+    taken = {item.strip() for item in existing}
+    if stem not in taken:
+        return stem
+    index = 2
+    while f"{stem}_{index}" in taken:
+        index += 1
+    return f"{stem}_{index}"
+
+
+def regenerate_signal_ids(
+    signals: Iterable[TemplateSignal],
+) -> tuple[TemplateSignal, ...]:
+    """Deep-copy signals with newly generated unique ids, preserving order."""
+    used: list[str] = []
+    copies: list[TemplateSignal] = []
+    for index, item in enumerate(signals):
+        new_id = next_signal_id(item.name, used)
+        used.append(new_id)
+        copies.append(
+            replace(
+                item,
+                id=new_id,
+                order=index,
+            )
+        )
+    return tuple(copies)
+
+
+def validate_template(
+    template: SignalTemplate,
+    *,
+    other_ids: Iterable[str] = (),
+    other_names: Iterable[str] = (),
+) -> None:
+    """Raise TemplateIdentityError if the template cannot be saved."""
+    if not is_valid_template_id(template.id):
+        raise TemplateIdentityError(f"Invalid template id '{template.id}'.")
+    display = template.device_type.strip()
+    if not display:
+        raise TemplateIdentityError("Template display name is required.")
+    if template.id in {item.strip() for item in other_ids}:
+        raise TemplateIdentityError(f"Duplicate template id '{template.id}'.")
+    if display in {item.strip() for item in other_names}:
+        raise TemplateIdentityError(f"Duplicate template name '{display}'.")
+
+    seen: set[str] = set()
+    for item in template.signals_in_order():
+        if not item.name.strip():
+            raise TemplateIdentityError("Signal name is required.")
+        if not is_valid_signal_id(item.id):
+            raise TemplateIdentityError(f"Invalid signal id '{item.id}'.")
+        if item.id in seen:
+            raise TemplateIdentityError(f"Duplicate signal id '{item.id}'.")
+        seen.add(item.id)
+        io_type = item.signal_type.strip().upper()
+        if io_type not in VALID_IO_TYPES:
+            raise TemplateIdentityError(
+                f"Invalid IO type '{item.signal_type}' on signal '{item.name}'."
+            )
 
 
 def template_to_yaml_data(template: SignalTemplate) -> dict:
