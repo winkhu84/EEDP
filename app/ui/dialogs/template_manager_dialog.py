@@ -1,12 +1,13 @@
-"""Template Manager dialog — properties draft + read-only signal table."""
+"""Template Manager dialog — property drafts + editable signal drafts."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QStyledItemDelegate,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -25,7 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.engine.signal_template_library import SignalTemplateLibrary
-from app.model.signal_template import SignalTemplate, TemplateSignal
+from app.model.signal_template import VALID_IO_TYPES, SignalTemplate
 
 ROLE_TEMPLATE_ID = Qt.ItemDataRole.UserRole
 
@@ -33,6 +35,18 @@ _SIGNAL_COLUMNS = ("Signal Name", "I/O Type", "Required / Optional")
 _COL_NAME = 0
 _COL_IO_TYPE = 1
 _COL_REQUIRED = 2
+_IO_TYPE_OPTIONS = tuple(sorted(VALID_IO_TYPES))
+_REQUIRED_OPTIONS = ("Required", "Optional")
+
+
+@dataclass
+class TemplateSignalDraft:
+    """Dialog-local draft for one template signal (never written to the library)."""
+
+    signal_id: str
+    name: str
+    signal_type: str
+    required: bool
 
 
 @dataclass
@@ -43,10 +57,44 @@ class TemplatePropertyDraft:
     display_name: str
     signal_count: int
     list_label: str
+    signals: list[TemplateSignalDraft] = field(default_factory=list)
+
+
+class _ComboDelegate(QStyledItemDelegate):
+    """Combo-box editor for constrained draft columns."""
+
+    def __init__(self, options: tuple[str, ...], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._options = options
+
+    def createEditor(
+        self,
+        parent: QWidget,
+        _option: object,
+        _index: object,
+    ) -> QComboBox:
+        combo = QComboBox(parent)
+        combo.addItems(list(self._options))
+        return combo
+
+    def setEditorData(self, editor: QWidget, index: object) -> None:
+        if not isinstance(editor, QComboBox):
+            return
+        value = str(index.data() or "")
+        position = editor.findText(value)
+        if position >= 0:
+            editor.setCurrentIndex(position)
+        else:
+            editor.setCurrentText(value)
+
+    def setModelData(self, editor: QWidget, model: object, index: object) -> None:
+        if not isinstance(editor, QComboBox):
+            return
+        model.setData(index, editor.currentText(), Qt.ItemDataRole.EditRole)
 
 
 class TemplateManagerDialog(QDialog):
-    """Browse templates, draft property edits, and view signals (read-only)."""
+    """Browse templates and edit dialog-local property/signal drafts."""
 
     def __init__(
         self,
@@ -73,6 +121,7 @@ class TemplateManagerDialog(QDialog):
         self.template_list.currentItemChanged.connect(self._on_selection_changed)
         self.name_value.textEdited.connect(self._on_display_name_edited)
         self.apply_draft_button.clicked.connect(self._on_apply_draft)
+        self.signal_table.itemChanged.connect(self._on_signal_item_changed)
         self.refresh_list()
 
     @property
@@ -92,11 +141,19 @@ class TemplateManagerDialog(QDialog):
         """Return the dialog-local draft for ``template_id``, if any."""
         return self._drafts.get(template_id)
 
+    def signal_drafts_for(self, template_id: str) -> tuple[TemplateSignalDraft, ...]:
+        """Return dialog-local signal drafts for ``template_id``."""
+        draft = self._drafts.get(template_id)
+        if draft is None:
+            return ()
+        return tuple(draft.signals)
+
     def refresh_list(self) -> None:
         """Reload the left list from the shared library without mutating templates."""
         previous = self.selected_template_id()
         if previous is not None:
             self._flush_editor_to_draft(previous)
+            self._flush_signal_table_to_draft(previous)
 
         templates = self._library.load_all()
         self._templates_by_id = {item.id: item for item in templates}
@@ -179,7 +236,11 @@ class TemplateManagerDialog(QDialog):
         signals_layout = QVBoxLayout(signals_box)
         self.signal_table.setObjectName("templateManagerSignalTable")
         self.signal_table.setHorizontalHeaderLabels(list(_SIGNAL_COLUMNS))
-        self.signal_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.signal_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked
+            | QAbstractItemView.EditTrigger.EditKeyPressed
+            | QAbstractItemView.EditTrigger.AnyKeyPressed
+        )
         self.signal_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
@@ -190,6 +251,12 @@ class TemplateManagerDialog(QDialog):
         header = self.signal_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         header.setStretchLastSection(True)
+        self.signal_table.setItemDelegateForColumn(
+            _COL_IO_TYPE, _ComboDelegate(_IO_TYPE_OPTIONS, self.signal_table)
+        )
+        self.signal_table.setItemDelegateForColumn(
+            _COL_REQUIRED, _ComboDelegate(_REQUIRED_OPTIONS, self.signal_table)
+        )
         signals_layout.addWidget(self.signal_table)
         right.addWidget(signals_box, stretch=1)
 
@@ -207,14 +274,26 @@ class TemplateManagerDialog(QDialog):
     def _ensure_draft(self, template: SignalTemplate) -> TemplatePropertyDraft:
         existing = self._drafts.get(template.id)
         if existing is not None:
-            # Keep dialog-local edits; refresh read-only signal count from library.
-            existing.signal_count = len(template.signals_in_order())
+            # Keep dialog-local edits; do not rebuild signal drafts from library.
+            existing.signal_count = len(existing.signals) or len(
+                template.signals_in_order()
+            )
             return existing
+        signals = [
+            TemplateSignalDraft(
+                signal_id=item.id,
+                name=item.name,
+                signal_type=item.signal_type,
+                required=item.required,
+            )
+            for item in template.signals_in_order()
+        ]
         draft = TemplatePropertyDraft(
             template_id=template.id,
             display_name=template.device_type,
-            signal_count=len(template.signals_in_order()),
+            signal_count=len(signals),
             list_label=template.device_type,
+            signals=signals,
         )
         self._drafts[template.id] = draft
         return draft
@@ -224,6 +303,20 @@ class TemplateManagerDialog(QDialog):
         if draft is None:
             return
         draft.display_name = self.name_value.text()
+
+    def _flush_signal_table_to_draft(self, template_id: str) -> None:
+        draft = self._drafts.get(template_id)
+        if draft is None:
+            return
+        rows = self.signal_table_rows()
+        if len(rows) != len(draft.signals):
+            return
+        for index, (name, io_type, required_label) in enumerate(rows):
+            signal = draft.signals[index]
+            signal.name = name
+            if io_type in VALID_IO_TYPES:
+                signal.signal_type = io_type
+            signal.required = required_label == "Required"
 
     def _select_by_id(self, template_id: str) -> None:
         for row in range(self.template_list.count()):
@@ -241,6 +334,7 @@ class TemplateManagerDialog(QDialog):
             previous_id = str(previous.data(ROLE_TEMPLATE_ID) or "")
             if previous_id:
                 self._flush_editor_to_draft(previous_id)
+                self._flush_signal_table_to_draft(previous_id)
 
         if current is None:
             self._clear_details()
@@ -259,10 +353,11 @@ class TemplateManagerDialog(QDialog):
         self.name_value.blockSignals(False)
         self.signal_count_value.setText(str(draft.signal_count))
         self.apply_draft_button.setEnabled(True)
-        self._populate_signal_table(template.signals_in_order())
+        self._populate_signal_table(draft.signals)
 
-    def _populate_signal_table(self, signals: tuple[TemplateSignal, ...]) -> None:
-        """Fill the read-only signal table from library template signals."""
+    def _populate_signal_table(self, signals: list[TemplateSignalDraft]) -> None:
+        """Fill the signal table from dialog-local drafts."""
+        self.signal_table.blockSignals(True)
         self.signal_table.setRowCount(0)
         self.signal_table.setRowCount(len(signals))
         for row, signal in enumerate(signals):
@@ -271,9 +366,44 @@ class TemplateManagerDialog(QDialog):
             for column, text in enumerate(values):
                 item = QTableWidgetItem(text)
                 item.setFlags(
-                    Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
+                    Qt.ItemFlag.ItemIsSelectable
+                    | Qt.ItemFlag.ItemIsEnabled
+                    | Qt.ItemFlag.ItemIsEditable
                 )
                 self.signal_table.setItem(row, column, item)
+        self.signal_table.blockSignals(False)
+
+    def _on_signal_item_changed(self, item: QTableWidgetItem) -> None:
+        template_id = self.selected_template_id()
+        if template_id is None:
+            return
+        draft = self._drafts.get(template_id)
+        if draft is None:
+            return
+        row = item.row()
+        if row < 0 or row >= len(draft.signals):
+            return
+        signal = draft.signals[row]
+        column = item.column()
+        text = item.text().strip()
+        if column == _COL_NAME:
+            signal.name = text
+            return
+        if column == _COL_IO_TYPE:
+            if text in VALID_IO_TYPES:
+                signal.signal_type = text
+            else:
+                self.signal_table.blockSignals(True)
+                item.setText(signal.signal_type)
+                self.signal_table.blockSignals(False)
+            return
+        if column == _COL_REQUIRED:
+            if text in _REQUIRED_OPTIONS:
+                signal.required = text == "Required"
+            else:
+                self.signal_table.blockSignals(True)
+                item.setText("Required" if signal.required else "Optional")
+                self.signal_table.blockSignals(False)
 
     def _on_display_name_edited(self, text: str) -> None:
         template_id = self.selected_template_id()
@@ -306,4 +436,6 @@ class TemplateManagerDialog(QDialog):
         self.name_value.blockSignals(False)
         self.signal_count_value.setText("-")
         self.apply_draft_button.setEnabled(False)
+        self.signal_table.blockSignals(True)
         self.signal_table.setRowCount(0)
+        self.signal_table.blockSignals(False)

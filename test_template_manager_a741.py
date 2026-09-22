@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QAbstractItemView, QApplication
 
 from app.engine.signal_template_library import SignalTemplateLibrary
@@ -85,18 +86,23 @@ def test_switching_templates_refreshes_signal_rows() -> None:
 
 
 def test_signal_table_is_read_only() -> None:
+    """A7.4.1 was view-only; A7.4.2 enables draft edits without library writes."""
     _qt_app()
     library = SignalTemplateLibrary()
+    before = _library_snapshot(library)
     dialog = TemplateManagerDialog(library)
     _select_by_device_type(dialog, "Pump")
 
+    assert dialog.signal_table.columnCount() == 3
     assert (
         dialog.signal_table.editTriggers()
-        == QAbstractItemView.EditTrigger.NoEditTriggers
+        != QAbstractItemView.EditTrigger.NoEditTriggers
     )
     item = dialog.signal_table.item(0, 0)
     assert item is not None
-    assert not bool(item.flags() & item.flags().ItemIsEditable)
+    assert bool(item.flags() & Qt.ItemFlag.ItemIsEditable)
+    item.setText(item.text())
+    assert _library_snapshot(library) == before
 
 
 def test_shared_library_not_mutated_by_signal_table() -> None:
