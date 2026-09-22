@@ -116,12 +116,17 @@ class TemplateManagerDialog(QDialog):
         self.signal_count_value = QLabel("-")
         self.apply_draft_button = QPushButton("Apply Draft")
         self.signal_table = QTableWidget(0, len(_SIGNAL_COLUMNS))
+        self.add_signal_button = QPushButton("Add Signal")
+        self.delete_signal_button = QPushButton("Delete Signal")
+        self._next_draft_signal_seq = 1
 
         self._build_ui()
         self.template_list.currentItemChanged.connect(self._on_selection_changed)
         self.name_value.textEdited.connect(self._on_display_name_edited)
         self.apply_draft_button.clicked.connect(self._on_apply_draft)
         self.signal_table.itemChanged.connect(self._on_signal_item_changed)
+        self.add_signal_button.clicked.connect(self._on_add_signal)
+        self.delete_signal_button.clicked.connect(self._on_delete_signal)
         self.refresh_list()
 
     @property
@@ -258,6 +263,14 @@ class TemplateManagerDialog(QDialog):
             _COL_REQUIRED, _ComboDelegate(_REQUIRED_OPTIONS, self.signal_table)
         )
         signals_layout.addWidget(self.signal_table)
+
+        signal_buttons = QHBoxLayout()
+        self.add_signal_button.setObjectName("templateManagerAddSignalButton")
+        self.delete_signal_button.setObjectName("templateManagerDeleteSignalButton")
+        signal_buttons.addWidget(self.add_signal_button)
+        signal_buttons.addWidget(self.delete_signal_button)
+        signal_buttons.addStretch(1)
+        signals_layout.addLayout(signal_buttons)
         right.addWidget(signals_box, stretch=1)
 
         body.addLayout(right, stretch=3)
@@ -275,9 +288,7 @@ class TemplateManagerDialog(QDialog):
         existing = self._drafts.get(template.id)
         if existing is not None:
             # Keep dialog-local edits; do not rebuild signal drafts from library.
-            existing.signal_count = len(existing.signals) or len(
-                template.signals_in_order()
-            )
+            existing.signal_count = len(existing.signals)
             return existing
         signals = [
             TemplateSignalDraft(
@@ -353,7 +364,55 @@ class TemplateManagerDialog(QDialog):
         self.name_value.blockSignals(False)
         self.signal_count_value.setText(str(draft.signal_count))
         self.apply_draft_button.setEnabled(True)
+        self.add_signal_button.setEnabled(True)
+        self.delete_signal_button.setEnabled(True)
         self._populate_signal_table(draft.signals)
+
+    def _sync_signal_count(self, draft: TemplatePropertyDraft) -> None:
+        draft.signal_count = len(draft.signals)
+        self.signal_count_value.setText(str(draft.signal_count))
+
+    def _on_add_signal(self) -> None:
+        template_id = self.selected_template_id()
+        if template_id is None:
+            return
+        self._flush_signal_table_to_draft(template_id)
+        draft = self._drafts.get(template_id)
+        if draft is None:
+            return
+
+        draft_id = f"draft_signal_{self._next_draft_signal_seq}"
+        self._next_draft_signal_seq += 1
+        draft.signals.append(
+            TemplateSignalDraft(
+                signal_id=draft_id,
+                name="New Signal",
+                signal_type="DI",
+                required=False,
+            )
+        )
+        self._sync_signal_count(draft)
+        self._populate_signal_table(draft.signals)
+        self.signal_table.selectRow(len(draft.signals) - 1)
+
+    def _on_delete_signal(self) -> None:
+        template_id = self.selected_template_id()
+        if template_id is None:
+            return
+        row = self.signal_table.currentRow()
+        if row < 0:
+            return
+
+        self._flush_signal_table_to_draft(template_id)
+        draft = self._drafts.get(template_id)
+        if draft is None or row >= len(draft.signals):
+            return
+
+        del draft.signals[row]
+        self._sync_signal_count(draft)
+        self._populate_signal_table(draft.signals)
+        if draft.signals:
+            self.signal_table.selectRow(min(row, len(draft.signals) - 1))
 
     def _populate_signal_table(self, signals: list[TemplateSignalDraft]) -> None:
         """Fill the signal table from dialog-local drafts."""
@@ -436,6 +495,8 @@ class TemplateManagerDialog(QDialog):
         self.name_value.blockSignals(False)
         self.signal_count_value.setText("-")
         self.apply_draft_button.setEnabled(False)
+        self.add_signal_button.setEnabled(False)
+        self.delete_signal_button.setEnabled(False)
         self.signal_table.blockSignals(True)
         self.signal_table.setRowCount(0)
         self.signal_table.blockSignals(False)
