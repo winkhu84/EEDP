@@ -49,6 +49,11 @@ class RecommendationEngine:
             self._library = SignalTemplateLibrary(rule_engine=rule_engine)
         self._signal_engine = signal_engine or SignalEngine()
 
+    @property
+    def template_library(self) -> SignalTemplateLibrary:
+        """Shared SignalTemplateLibrary used for recommendations."""
+        return self._library
+
     def recommendations_for_type(
         self,
         device_type: str,

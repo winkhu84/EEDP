@@ -32,6 +32,7 @@ from app.engine.io_summary_engine import summarize_device, summarize_project
 from app.engine.plc_card_calculator import calculate_project_cards
 from app.engine.recommendation_engine import RecommendationEngine
 from app.engine.signal_engine import SignalEngine
+from app.engine.signal_template_library import SignalTemplateLibrary
 from app.engine.plc_module_mapping_engine import build_project_module_mapping
 from app.engine.tia_tag_generator import generate_sorted_validated_project_tags
 from app.export.fc_io_excel_exporter import (
@@ -58,16 +59,38 @@ class MainController:
         recommendation_engine: RecommendationEngine | None = None,
         io_list_parser: IoListParser | None = None,
         signal_engine: SignalEngine | None = None,
+        *,
+        template_library: SignalTemplateLibrary | None = None,
     ) -> None:
         self._view = view
         self._device_manager = device_manager or DeviceManager()
-        self._recommendation_engine = recommendation_engine or RecommendationEngine()
+        # One shared library for recommendations, Device Type combo, and future
+        # Template Manager. Prefer an explicit library; otherwise adopt the
+        # engine's library when an engine is injected.
+        if template_library is not None:
+            self._template_library = template_library
+        elif recommendation_engine is not None:
+            self._template_library = recommendation_engine.template_library
+        else:
+            self._template_library = SignalTemplateLibrary()
+
+        if recommendation_engine is not None:
+            self._recommendation_engine = recommendation_engine
+        else:
+            self._recommendation_engine = RecommendationEngine(
+                template_library=self._template_library
+            )
         self._io_list_parser = io_list_parser or IoListParser()
         self._signal_engine = signal_engine or SignalEngine()
         self._plc_card_configs: tuple[PlcCardConfig, ...] = (
             default_plc_card_configurations()
         )
         self._plc_rack_slot: dict[tuple[str, int], tuple[str, str]] = {}
+
+    @property
+    def template_library(self) -> SignalTemplateLibrary:
+        """Application-owned SignalTemplateLibrary shared with recommendations."""
+        return self._template_library
 
     def bind(self) -> None:
         """Connect view signals to controller handlers."""
@@ -113,14 +136,14 @@ class MainController:
         self._refresh_io_summaries()
 
     def refresh_device_types(self, extra_type: str = "") -> None:
-        """Reload the Device Type combo from SignalTemplateLibrary.
+        """Reload the Device Type combo from the shared SignalTemplateLibrary.
 
         DEVICE_TYPES is used only when the library returns no usable types.
         extra_type and in-memory device types are appended when missing so
         custom / imported / unknown types stay visible. Does not apply templates.
         """
         try:
-            library_types = self._recommendation_engine.supported_types()
+            library_types = self._template_library.device_types()
         except Exception:  # noqa: BLE001 - combo must still populate on library failure
             library_types = ()
 
