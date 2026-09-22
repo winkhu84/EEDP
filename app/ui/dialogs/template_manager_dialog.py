@@ -1,4 +1,4 @@
-"""Template Manager dialog — list + dialog-local property draft editing (A7.3)."""
+"""Template Manager dialog — properties draft + read-only signal table."""
 
 from __future__ import annotations
 
@@ -6,24 +6,33 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from app.engine.signal_template_library import SignalTemplateLibrary
-from app.model.signal_template import SignalTemplate
+from app.model.signal_template import SignalTemplate, TemplateSignal
 
 ROLE_TEMPLATE_ID = Qt.ItemDataRole.UserRole
+
+_SIGNAL_COLUMNS = ("Signal Name", "I/O Type", "Required / Optional")
+_COL_NAME = 0
+_COL_IO_TYPE = 1
+_COL_REQUIRED = 2
 
 
 @dataclass
@@ -37,7 +46,7 @@ class TemplatePropertyDraft:
 
 
 class TemplateManagerDialog(QDialog):
-    """Browse and draft-edit Signal Template properties (no library/YAML persist)."""
+    """Browse templates, draft property edits, and view signals (read-only)."""
 
     def __init__(
         self,
@@ -47,7 +56,7 @@ class TemplateManagerDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("templateManagerDialog")
         self.setWindowTitle("Template Manager")
-        self.resize(720, 440)
+        self.resize(780, 560)
 
         self._library = library
         self._templates_by_id: dict[str, SignalTemplate] = {}
@@ -58,6 +67,7 @@ class TemplateManagerDialog(QDialog):
         self.name_value = QLineEdit()
         self.signal_count_value = QLabel("-")
         self.apply_draft_button = QPushButton("Apply Draft")
+        self.signal_table = QTableWidget(0, len(_SIGNAL_COLUMNS))
 
         self._build_ui()
         self.template_list.currentItemChanged.connect(self._on_selection_changed)
@@ -110,6 +120,22 @@ class TemplateManagerDialog(QDialog):
         else:
             self._clear_details()
 
+    def signal_table_rows(self) -> list[tuple[str, str, str]]:
+        """Return current signal-table cells as (name, io_type, required_label)."""
+        rows: list[tuple[str, str, str]] = []
+        for row in range(self.signal_table.rowCount()):
+            name_item = self.signal_table.item(row, _COL_NAME)
+            io_item = self.signal_table.item(row, _COL_IO_TYPE)
+            req_item = self.signal_table.item(row, _COL_REQUIRED)
+            rows.append(
+                (
+                    name_item.text() if name_item is not None else "",
+                    io_item.text() if io_item is not None else "",
+                    req_item.text() if req_item is not None else "",
+                )
+            )
+        return rows
+
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
@@ -124,6 +150,9 @@ class TemplateManagerDialog(QDialog):
         self.template_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         list_layout.addWidget(self.template_list)
         body.addWidget(list_box, stretch=2)
+
+        right = QVBoxLayout()
+        right.setSpacing(10)
 
         details_box = QGroupBox("Template Properties")
         details_form = QFormLayout(details_box)
@@ -144,8 +173,27 @@ class TemplateManagerDialog(QDialog):
         details_form.addRow("Display Name", self.name_value)
         details_form.addRow("Number of Signals", self.signal_count_value)
         details_form.addRow("", self.apply_draft_button)
-        body.addWidget(details_box, stretch=3)
+        right.addWidget(details_box)
 
+        signals_box = QGroupBox("Signals")
+        signals_layout = QVBoxLayout(signals_box)
+        self.signal_table.setObjectName("templateManagerSignalTable")
+        self.signal_table.setHorizontalHeaderLabels(list(_SIGNAL_COLUMNS))
+        self.signal_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.signal_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.signal_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.signal_table.verticalHeader().setVisible(False)
+        header = self.signal_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        header.setStretchLastSection(True)
+        signals_layout.addWidget(self.signal_table)
+        right.addWidget(signals_box, stretch=1)
+
+        body.addLayout(right, stretch=3)
         root.addLayout(body, stretch=1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -211,6 +259,21 @@ class TemplateManagerDialog(QDialog):
         self.name_value.blockSignals(False)
         self.signal_count_value.setText(str(draft.signal_count))
         self.apply_draft_button.setEnabled(True)
+        self._populate_signal_table(template.signals_in_order())
+
+    def _populate_signal_table(self, signals: tuple[TemplateSignal, ...]) -> None:
+        """Fill the read-only signal table from library template signals."""
+        self.signal_table.setRowCount(0)
+        self.signal_table.setRowCount(len(signals))
+        for row, signal in enumerate(signals):
+            required_label = "Required" if signal.required else "Optional"
+            values = (signal.name, signal.signal_type, required_label)
+            for column, text in enumerate(values):
+                item = QTableWidgetItem(text)
+                item.setFlags(
+                    Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
+                )
+                self.signal_table.setItem(row, column, item)
 
     def _on_display_name_edited(self, text: str) -> None:
         template_id = self.selected_template_id()
@@ -243,3 +306,4 @@ class TemplateManagerDialog(QDialog):
         self.name_value.blockSignals(False)
         self.signal_count_value.setText("-")
         self.apply_draft_button.setEnabled(False)
+        self.signal_table.setRowCount(0)
