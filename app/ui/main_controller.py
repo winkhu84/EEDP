@@ -45,6 +45,7 @@ from app.ui.dialogs.address_usage_dialog import AddressUsageDialog
 from app.ui.dialogs.fc_io_preview_dialog import FCIOPreviewDialog
 from app.ui.dialogs.generate_preview_dialog import GeneratePreviewDialog
 from app.ui.dialogs.plc_module_mapping_dialog import PLCModuleMappingDialog
+from app.ui.dialogs.template_manager_dialog import TemplateManagerDialog
 from app.ui.dialogs.tia_tag_preview_dialog import TIATagPreviewDialog
 from app.ui.main_window import MainWindow
 
@@ -107,6 +108,7 @@ class MainController:
         toolbar.remove_device_button.clicked.connect(self._on_remove_device)
         toolbar.duplicate_device_button.clicked.connect(self._on_duplicate_device)
         toolbar.import_io_list_button.clicked.connect(self._on_import_io_list)
+        toolbar.template_manager_button.clicked.connect(self._on_template_manager)
         toolbar.debug_button.clicked.connect(self._on_debug)
 
         self._view.project_tree.tree.itemSelectionChanged.connect(
@@ -269,6 +271,11 @@ class MainController:
             )
         self.refresh_device_types()
         self._refresh_io_summaries()
+
+    def _on_template_manager(self) -> None:
+        """Open the Template Manager browse dialog (A7.2 shell only)."""
+        dialog = TemplateManagerDialog(self._template_library, parent=self._view)
+        dialog.exec()
 
     def _on_tree_selection_changed(self) -> None:
         self._update_device_action_state()
